@@ -5,9 +5,9 @@ from pathlib import Path
 import polars as pl
 from minari import DataCollector
 
-from datasets.config import GOOD_ZONE_DAYS, TIMEZONE, tzinfo
-from datasets.env import MockEnv
-from datasets.transforms import (
+from config import GOOD_ZONE_DAYS, TIMEZONE, tzinfo
+from env import MockEnv
+from transforms import (
     transform_action,
     transform_action_traces,
     transform_reward,

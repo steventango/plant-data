@@ -3,7 +3,7 @@ from itertools import product
 import numpy as np
 import polars as pl
 
-from datasets.config import BLUE, RED, WHITE
+from config import BLUE, RED, WHITE
 
 
 def compute_action_coefficients(action: np.ndarray) -> np.ndarray:
