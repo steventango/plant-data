@@ -12,6 +12,7 @@ from transforms import (
     transform_action_traces,
     transform_reward,
     transform_state,
+    transform_outlier_detection,
 )
 
 version = "v12"
@@ -105,17 +106,8 @@ df_daily = df_daily.with_columns(
     ).alias("reward"),
 )
 df_daily = df_daily.drop("prev_clean_area")
-# compute action traces for daily data
 df_daily = transform_action_traces(df_daily)
-# drop rows with outlier change outside 1%, 99% percentiles
-percentile = 0.01
-ql = df_daily["reward"].quantile(percentile)
-qu = df_daily["reward"].quantile(1 - percentile)
-df_daily = df_daily.with_columns(((pl.col("reward") >= ql) & (pl.col("reward") <= qu)).alias("valid"))
-invalid_count = (~df_daily["valid"]).sum()
-print(
-    f"marked {invalid_count} / {df_daily.height} daily rows as invalid"
-)
+df_daily = transform_outlier_detection(df_daily, q1=0.01, q2=0.99)
 print(df_daily.select("reward").describe())
 print(df_daily[["time", "red_coef", "white_coef", "blue_coef", "reward"]])
 
@@ -128,7 +120,9 @@ df_daily = df_daily.with_columns(
     .alias("terminal"),
 )
 # TODO: consider keeping some of the weird days
-df_daily_filtered_rl = df_daily.filter((pl.col("day") <= 13) & pl.col("is_good_day") & pl.col("valid"))
+df_daily_filtered_rl = df_daily.filter(
+    (pl.col("day") <= 13) & pl.col("is_good_day") & ~pl.col("outlier")
+)
 
 df_daily_filtered_rl = df_daily_filtered_rl.with_columns(
     pl.col("time").shift(-1).over("experiment", "zone", "plant_id").alias("next_time"),
