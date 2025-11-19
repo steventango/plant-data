@@ -14,7 +14,7 @@ from transforms import (
     transform_state,
 )
 
-version = "v11"
+version = "v12"
 
 dfs = []
 for exp_id_zone_id, good_days in GOOD_ZONE_DAYS.items():
@@ -85,7 +85,6 @@ for exp_id_zone_id, good_days in GOOD_ZONE_DAYS.items():
     df = df.with_columns(
         (pl.col("day") == 13).alias("terminal"),
     )
-    df = df.filter(pl.col("day") <= 13)
     print(f"E{exp_id}/zone{zone_id}: day min {df['day'].min()}, max {df['day'].max()}")
     dfs.append(df)
 
@@ -94,7 +93,6 @@ df = pl.concat(dfs, how="diagonal_relaxed").sort(
 )
 print(df.head())
 df_daily = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
-df_daily = df_daily.filter(pl.col("is_good_day"))
 df_daily = df_daily.with_columns(
     pl.col("clean_area")
     .shift(1)
@@ -113,43 +111,44 @@ df_daily = transform_action_traces(df_daily)
 percentile = 0.01
 ql = df_daily["reward"].quantile(percentile)
 qu = df_daily["reward"].quantile(1 - percentile)
-df_daily_filtered = df_daily.filter((pl.col("reward") >= ql) & (pl.col("reward") <= qu))
+df_daily = df_daily.with_columns(((pl.col("reward") >= ql) & (pl.col("reward") <= qu)).alias("valid"))
+invalid_count = (~df_daily["valid"]).sum()
 print(
-    f"dropped {df_daily.height - df_daily_filtered.height} / {df_daily.height} daily rows as outliers"
+    f"marked {invalid_count} / {df_daily.height} daily rows as invalid"
 )
-print(df_daily_filtered.select("reward").describe())
-print(df_daily_filtered[["time", "red_coef", "white_coef", "blue_coef", "reward"]])
+print(df_daily.select("reward").describe())
+print(df_daily[["time", "red_coef", "white_coef", "blue_coef", "reward"]])
 
 # add terminal flags to daily filtered
-df_daily_filtered = df_daily_filtered.with_columns(
+df_daily = df_daily.with_columns(
     pl.col("time")
     .shift(-1)
     .over("experiment", "zone", "plant_id")
     .is_null()
     .alias("terminal"),
 )
+# TODO: consider keeping some of the weird days
+df_daily_filtered_rl = df_daily.filter((pl.col("day") <= 13) & pl.col("is_good_day") & pl.col("valid"))
 
-# add truncated flags for gaps due to outlier removal
-df_daily_filtered = df_daily_filtered.with_columns(
+df_daily_filtered_rl = df_daily_filtered_rl.with_columns(
     pl.col("time").shift(-1).over("experiment", "zone", "plant_id").alias("next_time"),
 )
-df_daily_filtered = df_daily_filtered.with_columns(
+df_daily_filtered_rl = df_daily_filtered_rl.with_columns(
     (
         pl.col("next_time").is_not_null()
         & (pl.col("next_time") != pl.col("time") + pl.duration(days=1))
     ).alias("truncated")
 )
-df_daily_filtered = df_daily_filtered.drop("next_time")
+df_daily_filtered_rl = df_daily_filtered_rl.drop("next_time")
 
 # save to parquet
 Path("/data/offline").mkdir(parents=True, exist_ok=True)
 df.write_parquet(f"/data/offline/cleaned_offline_dataset_continuous_{version}.parquet")
-df_daily_filtered.write_parquet(
+df_daily.write_parquet(
     f"/data/offline/cleaned_offline_dataset_daily_continuous_{version}.parquet"
 )
-
 # Create continuous action dataset
-mock_env = MockEnv(df_daily_filtered, use_continuous_actions=True)
+mock_env = MockEnv(df_daily_filtered_rl, use_continuous_actions=True)
 env = DataCollector(mock_env, record_infos=True)
 
 # Run episodes until environment indicates all data has been processed
