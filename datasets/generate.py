@@ -3,19 +3,17 @@ from datetime import datetime, time
 from pathlib import Path
 
 import polars as pl
-from minari import DataCollector
-
 from config import GOOD_ZONE_DAYS, TIMEZONE, tzinfo
 from env import MockEnv
+from minari import DataCollector
 from transforms import (
     transform_action,
     transform_action_traces,
+    transform_image_embeddings,
+    transform_outlier_detection,
     transform_reward,
     transform_state,
-    transform_outlier_detection,
 )
-
-version = "v12"
 
 dfs = []
 for exp_id_zone_id, good_days in GOOD_ZONE_DAYS.items():
@@ -111,14 +109,8 @@ df_daily = transform_outlier_detection(df_daily, q1=0.01, q2=0.99)
 print(df_daily.select("reward").describe())
 print(df_daily[["time", "red_coef", "white_coef", "blue_coef", "reward"]])
 
-# add terminal flags to daily filtered
-df_daily = df_daily.with_columns(
-    pl.col("time")
-    .shift(-1)
-    .over("experiment", "zone", "plant_id")
-    .is_null()
-    .alias("terminal"),
-)
+df_daily = transform_image_embeddings(df_daily, max_workers=8)
+
 # TODO: consider keeping some of the weird days
 df_daily_filtered_rl = df_daily.filter(
     (pl.col("day") <= 13) & pl.col("is_good_day") & ~pl.col("outlier")
