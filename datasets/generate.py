@@ -7,6 +7,7 @@ from config import GOOD_ZONE_DAYS, TIMEZONE, tzinfo
 from env import MockEnv
 from minari import DataCollector
 from transforms import (
+    import_labels,
     transform_action,
     transform_action_traces,
     transform_image_embeddings,
@@ -14,6 +15,9 @@ from transforms import (
     transform_reward,
     transform_state,
 )
+
+version = "v13"
+
 
 dfs = []
 for exp_id_zone_id, good_days in GOOD_ZONE_DAYS.items():
@@ -90,6 +94,7 @@ for exp_id_zone_id, good_days in GOOD_ZONE_DAYS.items():
 df = pl.concat(dfs, how="diagonal_relaxed").sort(
     "experiment", "zone", "plant_id", "time"
 )
+df = import_labels(df, "/data/offline/labeled_dataset.parquet")
 print(df.head())
 df_daily = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
 df_daily = df_daily.with_columns(
@@ -126,7 +131,14 @@ df_daily_filtered_rl = df_daily_filtered_rl.with_columns(
     ).alias("truncated")
 )
 df_daily_filtered_rl = df_daily_filtered_rl.drop("next_time")
-
+# TODO: is this the correct terminal?
+df_daily_filtered_rl = df_daily_filtered_rl.with_columns(
+    pl.col("time")
+    .shift(-1)
+    .over("experiment", "zone", "plant_id")
+    .is_null()
+    .alias("terminal"),
+)
 # save to parquet
 Path("/data/offline").mkdir(parents=True, exist_ok=True)
 df.write_parquet(f"/data/offline/cleaned_offline_dataset_continuous_{version}.parquet")
