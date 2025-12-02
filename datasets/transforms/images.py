@@ -14,10 +14,10 @@ import requests
 from PIL import Image
 from tqdm import tqdm
 
-# Image processing configuration
-PIPELINE_URL = "http://pipeline:8000"  # On plant-network
-EMBEDDINGS_URL = "http://embeddings:8000"  # On plant-network
-DATA_DIR = Path("/data")  # /data/plant-rl is mounted as /data in container
+
+PIPELINE_URL = "http://localhost:8800"
+EMBEDDINGS_URL = "http://localhost:8803"
+DATA_DIR = Path("/data/plant-rl")
 OFFLINE_DIR = DATA_DIR / "offline"
 ONLINE_DIR = DATA_DIR / "online"
 
