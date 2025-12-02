@@ -662,7 +662,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
     return results
 
 
-def transform_image_embeddings(df: pl.DataFrame, max_workers: int = 8) -> pl.DataFrame:
+def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
     """Transform to add image embeddings to a daily dataset.
 
     This function:
@@ -675,7 +675,6 @@ def transform_image_embeddings(df: pl.DataFrame, max_workers: int = 8) -> pl.Dat
 
     Args:
         df: DataFrame with experiment, zone, and time columns
-        max_workers: Number of parallel workers for zone processing
 
     Returns:
         DataFrame with added plant_id, embedding, and image_path columns.
@@ -717,35 +716,13 @@ def transform_image_embeddings(df: pl.DataFrame, max_workers: int = 8) -> pl.Dat
     logger.info(
         f"Processing {len(zone_groups)} zones with {len(unique_images)} total images"
     )
-    logger.info(f"Using {max_workers} parallel workers")
 
     # Store results for each detected plant
     all_results = []
 
-    # Process zones in parallel
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all zone processing tasks
-        future_to_zone = {
-            executor.submit(process_zone_images, zone_key, images): zone_key
-            for zone_key, images in zone_groups.items()
-        }
-
-        # Collect results as they complete
-        with tqdm(total=len(zone_groups), desc="Processing zones") as pbar:
-            for future in as_completed(future_to_zone):
-                zone_key = future_to_zone[future]
-                try:
-                    results = future.result()
-                    all_results.extend(results)
-                    logger.info(
-                        f"E{zone_key[0]}/zone{zone_key[1]}: Generated {len(results)} plant embeddings"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error processing E{zone_key[0]}/zone{zone_key[1]}: {e}"
-                    )
-                finally:
-                    pbar.update(1)
+    for zone_key, images in tqdm(zone_groups.items()):
+        result = process_zone_images(zone_key, images)
+        all_results.extend(result)
 
     # Create new dataframe with embeddings
     logger.info(f"Creating new dataset with {len(all_results)} plant detections")
