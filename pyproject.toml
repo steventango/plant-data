@@ -14,4 +14,8 @@ dependencies = [
     "pandas>=2.3.3",
     "umap-learn>=0.5.9.post2",
     "matplotlib>=3.10.7",
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.7",
 ]
