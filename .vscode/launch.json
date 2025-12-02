@@ -1,0 +1,20 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Python Debugger: process_zone.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "process_zone.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--data-path",
+                "/data/plant-rl/online/E14/P1/Constant1/alliance-zone01/"
+            ]
+        }
+    ]
+}
