@@ -1,4 +1,5 @@
 import glob
+import logging
 from datetime import datetime, time
 from pathlib import Path
 
@@ -16,7 +17,9 @@ from transforms import (
     transform_state,
 )
 
-version = "v13"
+logging.basicConfig(level=logging.INFO)
+
+version = "v16"
 
 
 dfs = []
@@ -65,17 +68,22 @@ for exp_id_zone_id, good_days in GOOD_ZONE_DAYS.items():
         pl.col("action.5").fill_null(strategy="forward").over("plant_id"),
         pl.col("clean_area").fill_null(strategy="forward").over("plant_id"),
     )
+    df = df.with_columns(
+        ((pl.col("time").dt.date() - df["time"].dt.date().min()).dt.total_days()).alias(
+            "day"
+        ),
+    )
+    # daily subsampling
+    # df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
+    # # hourly subsampling
+    df = df.filter(pl.col("time").dt.minute() == 30)
+    df = transform_image_embeddings(df, max_workers=1)
 
     df = transform_state(df)
     df = transform_action(df)
     df = transform_action_traces(df)
     df = transform_reward(df)
 
-    df = df.with_columns(
-        ((pl.col("time").dt.date() - df["time"].dt.date().min()).dt.total_days()).alias(
-            "day"
-        ),
-    )
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))
     print(
         df.select(
@@ -112,9 +120,7 @@ df_daily = df_daily.drop("prev_clean_area")
 df_daily = transform_action_traces(df_daily)
 df_daily = transform_outlier_detection(df_daily, q1=0.01, q2=0.99)
 print(df_daily.select("reward").describe())
-print(df_daily[["time", "red_coef", "white_coef", "blue_coef", "reward"]])
-
-df_daily = transform_image_embeddings(df_daily, max_workers=8)
+print(df_daily[["time", "day", "red_coef", "white_coef", "blue_coef", "reward"]])
 
 # TODO: consider keeping some of the weird days
 df_daily_filtered_rl = df_daily.filter(
