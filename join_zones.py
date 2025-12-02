@@ -4,9 +4,8 @@ from pathlib import Path
 from datetime import time
 
 import polars as pl
-from config import TIMEZONE, tzinfo, VERSION
+from config import tzinfo, VERSION
 from transforms import (
-    import_labels,
     transform_action_traces,
     transform_outlier_detection,
 )
