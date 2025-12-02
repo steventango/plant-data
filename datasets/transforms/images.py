@@ -2,11 +2,12 @@ import base64
 import glob
 import io
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
+import threading
 
 import polars as pl
 import requests
@@ -20,12 +21,17 @@ DATA_DIR = Path("/data")  # /data/plant-rl is mounted as /data in container
 OFFLINE_DIR = DATA_DIR / "offline"
 ONLINE_DIR = DATA_DIR / "online"
 
-# Pipeline parameters
-POT_DETECTION_PROMPT = "pot"
-POT_DETECTION_THRESHOLD = 0.03
-WARP_MARGIN = 0.25
 
 logger = logging.getLogger(__name__)
+
+thread_local = threading.local()
+
+
+def get_session() -> requests.Session:
+    """Get a thread-local requests session."""
+    if not hasattr(thread_local, "session"):
+        thread_local.session = requests.Session()
+    return thread_local.session
 
 
 def encode_image(image: Image.Image) -> str:
@@ -41,33 +47,27 @@ def decode_image(image_data: str) -> Image.Image:
     return Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
 
-def find_image_path(experiment: int, zone: int, timestamp: datetime) -> Optional[Path]:
+def find_image_path(experiment: int, zone: int, image_name: str) -> Optional[Path]:
     """Find the image file corresponding to a dataset row.
 
     Args:
         experiment: Experiment ID (e.g., 11, 12, 13)
         zone: Zone ID (e.g., 1, 2, 3)
-        timestamp: Timestamp from the dataset (in America/Edmonton timezone)
+        image_name: Image name from the dataset (e.g., "2025-08-20T153000+0000_left.jpg")
 
     Returns:
         Path to the image file, or None if not found
     """
-    if timestamp.tzinfo is None:
-        # If no timezone, assume America/Edmonton
-        timestamp = timestamp.replace(tzinfo=ZoneInfo("America/Edmonton"))
-
-    # Convert to UTC for filename matching
-    timestamp_utc = timestamp.astimezone(ZoneInfo("UTC"))
-    timestamp_str = timestamp_utc.strftime("%Y-%m-%dT%H%M00+0000")
-
     # Search for the image in the zone directory
-    zone_glob = f"{ONLINE_DIR}/E{experiment}/P1/*/alliance-zone{zone:02}/images/{timestamp_str}_left.jpg"
+    zone_glob = (
+        f"{ONLINE_DIR}/E{experiment}/P1/*/alliance-zone{zone:02}/images/{image_name}"
+    )
     matches = glob.glob(zone_glob)
 
     if matches:
         return Path(matches[0])
 
-    logger.warning(f"Image not found: E{experiment}/zone{zone} at {timestamp_str}")
+    logger.warning(f"Image not found: E{experiment}/zone{zone} at {image_name}")
     return None
 
 
@@ -86,34 +86,94 @@ def detect_pots_reference(image_path: Path, zone_key: tuple) -> Optional[dict]:
         image = Image.open(image_path).convert("RGB")
         image_data = encode_image(image)
 
-        # Call full pipeline to get pot positions with visualization
-        response = requests.post(
-            f"{PIPELINE_URL}/pot/pipeline",
+        # 1. Detect pots
+        detect_response = get_session().post(
+            f"{PIPELINE_URL}/pot/detect",
             json={
                 "image_data": image_data,
-                "text_prompt": POT_DETECTION_PROMPT,
-                "threshold": POT_DETECTION_THRESHOLD,
-                "margin": WARP_MARGIN,
-                "visualize": True,  # Enable visualization for debugging
+                "visualize": True,
             },
-            timeout=120,
+            timeout=30,
         )
-        response.raise_for_status()
-        result = response.json()
+        detect_response.raise_for_status()
+        detect_result = detect_response.json()
+        boxes = detect_result.get("boxes", [])
 
-        # Save visualization if available
-        if "visualization" in result and result["visualization"]:
+        if not boxes:
+            logger.warning(f"No pots detected in {image_path}")
+            return None
+
+        logger.info(f"Detected {len(boxes)} pots in {image_path}")
+
+        # Save detect visualization if available
+        if "visualization" in detect_result and detect_result["visualization"]:
             try:
                 viz_dir = OFFLINE_DIR / "visualizations"
                 viz_dir.mkdir(exist_ok=True)
-                viz_image = decode_image(result["visualization"])
-                viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_reference.jpg"
+                viz_image = decode_image(detect_result["visualization"])
+                viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_detect.jpg"
                 viz_image.save(viz_path)
-                logger.info(f"Saved visualization to {viz_path}")
+                logger.info(f"Saved detect visualization to {viz_path}")
             except Exception as e:
-                logger.warning(f"Failed to save visualization: {e}")
+                logger.warning(f"Failed to save detect visualization: {e}")
 
-        return result
+        # 2. Segment pots
+        segment_response = get_session().post(
+            f"{PIPELINE_URL}/pot/segment",
+            json={
+                "image_data": image_data,
+                "boxes": boxes,
+                "visualize": True,
+            },
+            timeout=60,
+        )
+        segment_response.raise_for_status()
+        segment_result = segment_response.json()
+        masks = segment_result.get("masks")
+
+        if not masks:
+            logger.warning(f"No masks generated for {image_path}")
+            return None
+
+        # Save segment visualization if available
+        if "visualization" in segment_result and segment_result["visualization"]:
+            try:
+                viz_dir = OFFLINE_DIR / "visualizations"
+                viz_dir.mkdir(exist_ok=True)
+                viz_image = decode_image(segment_result["visualization"])
+                viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_segment.jpg"
+                viz_image.save(viz_path)
+                logger.info(f"Saved segment visualization to {viz_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save segment visualization: {e}")
+
+        # 3. Compute quadrilaterals
+        quad_response = get_session().post(
+            f"{PIPELINE_URL}/pot/quad",
+            json={
+                "masks": masks,
+                "image_data": image_data,
+                "visualize": True,
+            },
+            timeout=30,
+        )
+        quad_response.raise_for_status()
+        quad_result = quad_response.json()
+        quadrilaterals = quad_result.get("quadrilaterals", [])
+
+        # Save quad visualization if available
+        if "visualization" in quad_result and quad_result["visualization"]:
+            try:
+                viz_dir = OFFLINE_DIR / "visualizations"
+                viz_dir.mkdir(exist_ok=True)
+                viz_image = decode_image(quad_result["visualization"])
+                viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_quad.jpg"
+                viz_image.save(viz_path)
+                logger.info(f"Saved quad visualization to {viz_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save quad visualization: {e}")
+
+        return {"quadrilaterals": quadrilaterals}
     except Exception as e:
         logger.error(f"Pot detection failed for {image_path}: {e}")
         return None
@@ -135,13 +195,11 @@ def warp_with_quadrilaterals(image_path: Path, quadrilaterals: list) -> Optional
         image_data = encode_image(image)
 
         # Call warp endpoint with pre-computed quadrilaterals
-        response = requests.post(
+        response = get_session().post(
             f"{PIPELINE_URL}/pot/warp",
             json={
                 "image_data": image_data,
                 "quadrilaterals": quadrilaterals,
-                "margin": WARP_MARGIN,
-                "output_size": None,
             },
             timeout=30,
         )
@@ -164,7 +222,7 @@ def generate_embedding(image_data: str) -> Optional[list]:
         768-dimensional embedding vector, or None if failed
     """
     try:
-        response = requests.post(
+        response = get_session().post(
             f"{EMBEDDINGS_URL}/predict",
             json={
                 "image_data": image_data,
@@ -181,8 +239,151 @@ def generate_embedding(image_data: str) -> Optional[list]:
         return None
 
 
+def detect_plant(
+    warped_image_b64: str,
+    zone_key: tuple = None,
+    plant_id: int = None,
+    timestamp_str: str = None,
+) -> Optional[dict]:
+    """Detect plant in a warped pot image."""
+    try:
+        response = get_session().post(
+            f"{PIPELINE_URL}/plant/detect",
+            json={"image_data": warped_image_b64, "visualize": True},
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        # Save detect visualization if available
+        if (
+            zone_key
+            and plant_id is not None
+            and timestamp_str
+            and "visualization" in result
+            and result["visualization"]
+        ):
+            try:
+                viz_dir = OFFLINE_DIR / "visualizations" / "plant_detect"
+                viz_dir.mkdir(parents=True, exist_ok=True)
+                viz_image = decode_image(result["visualization"])
+                viz_path = (
+                    viz_dir
+                    / f"E{zone_key[0]}_zone{zone_key[1]}_plant{plant_id:02d}_{timestamp_str}_detect.jpg"
+                )
+                viz_image.save(viz_path)
+                logger.debug(f"Saved plant detect visualization to {viz_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save plant detect visualization: {e}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Plant detection failed: {e}")
+        return None
+
+
+def segment_plant(
+    warped_image_b64: str,
+    boxes: list,
+    confidences: list,
+    zone_key: tuple = None,
+    plant_id: int = None,
+    timestamp_str: str = None,
+) -> Optional[dict]:
+    """Segment plant given detection boxes."""
+    try:
+        response = get_session().post(
+            f"{PIPELINE_URL}/plant/segment",
+            json={
+                "image_data": warped_image_b64,
+                "boxes": boxes,
+                "confidences": confidences,
+                "visualize": True,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        # Save segment visualization if available
+        if (
+            zone_key
+            and plant_id is not None
+            and timestamp_str
+            and "visualization" in result
+            and result["visualization"]
+        ):
+            try:
+                viz_dir = OFFLINE_DIR / "visualizations" / "plant_segment"
+                viz_dir.mkdir(parents=True, exist_ok=True)
+                viz_image = decode_image(result["visualization"])
+                viz_path = (
+                    viz_dir
+                    / f"E{zone_key[0]}_zone{zone_key[1]}_plant{plant_id:02d}_{timestamp_str}_segment.jpg"
+                )
+                viz_image.save(viz_path)
+                logger.debug(f"Saved plant segment visualization to {viz_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save plant segment visualization: {e}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Plant segmentation failed: {e}")
+        return None
+
+
+def compute_plant_stats(
+    warped_image_b64: str,
+    mask_b64: str,
+    zone_key: tuple = None,
+    plant_id: int = None,
+    timestamp_str: str = None,
+) -> Optional[dict]:
+    """Compute plant statistics given mask."""
+    try:
+        response = get_session().post(
+            f"{PIPELINE_URL}/plant/stats",
+            json={
+                "warped_image": warped_image_b64,
+                "mask": mask_b64,
+                "pot_size_mm": 60.0,
+                "margin": 0.25,
+                "visualize": True,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        # Save stats visualization if available
+        if (
+            zone_key
+            and plant_id is not None
+            and timestamp_str
+            and "visualization" in result
+            and result["visualization"]
+        ):
+            try:
+                viz_dir = OFFLINE_DIR / "visualizations" / "plant_stats"
+                viz_dir.mkdir(parents=True, exist_ok=True)
+                viz_image = decode_image(result["visualization"])
+                viz_path = (
+                    viz_dir
+                    / f"E{zone_key[0]}_zone{zone_key[1]}_plant{plant_id:02d}_{timestamp_str}_stats.jpg"
+                )
+                viz_image.save(viz_path)
+                logger.debug(f"Saved plant stats visualization to {viz_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save plant stats visualization: {e}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Plant stats failed: {e}")
+        return None
+
+
 def process_zone_images(zone_key: tuple, zone_images: list) -> list:
-    """Process all images for a single zone using reference image optimization.
+    """Process all images for a single zone using block-based execution.
 
     Args:
         zone_key: Tuple of (experiment, zone)
@@ -198,36 +399,36 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
         return results
 
     # Find the first 9:30 AM image as reference (daylight image)
-    # Use America/Edmonton timezone to ensure we pick daylight hours
     target_tz = ZoneInfo("America/Edmonton")
     reference_image = None
 
     for img_info in zone_images:
         timestamp = img_info["time"]
-        # Convert to target timezone if needed
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=target_tz)
         else:
             timestamp = timestamp.astimezone(target_tz)
 
-        # Check if this is a 9:30 AM image
         if timestamp.hour == 9 and timestamp.minute == 30:
             reference_image = img_info
             break
 
-    # Fallback to first image if no 9:30 AM image found
     if reference_image is None:
         reference_image = zone_images[0]
         logger.warning(
-            f"E{experiment}/zone{zone}: No 9:30 AM image found in {target_tz}, using first image at {reference_image['time']}"
+            f"E{experiment}/zone{zone}: No 9:30 AM image found, using first image"
         )
     else:
         logger.info(
-            f"E{experiment}/zone{zone}: Using 9:30 AM reference image at {reference_image['time']} ({target_tz})"
+            f"E{experiment}/zone{zone}: Using 9:30 AM reference image at {reference_image['image_path']}"
         )
 
     # Detect pots in reference image
+    t0 = time.time()
     detection_result = detect_pots_reference(reference_image["image_path"], zone_key)
+    logger.info(
+        f"E{experiment}/zone{zone}: Reference detection took {time.time() - t0:.2f}s"
+    )
     if detection_result is None:
         logger.warning(
             f"E{experiment}/zone{zone}: Failed to detect pots in reference image"
@@ -239,70 +440,224 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
         logger.warning(f"E{experiment}/zone{zone}: No pots detected in reference image")
         return results
 
-    # Log diagnostic info for investigation
-    num_detected = len(quadrilaterals)
-    logger.info(
-        f"E{experiment}/zone{zone}: Detected {num_detected} pots (expected 18), processing {len(zone_images)} images"
-    )
-    if num_detected != 18:
-        logger.warning(
-            f"E{experiment}/zone{zone}: Pot count mismatch! Expected 18, got {num_detected}. Check visualization at /data/offline/visualizations/E{experiment}_zone{zone}_reference.jpg"
-        )
-
-    # Create output directory for processed images
-    # Format: E{exp}/Z{zone:02d}/images/
+    # Create output directory
     processed_dir = (
         OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
     )
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    # Process all images in this zone using the same quadrilaterals
-    for img_info in zone_images:
+    # --- BLOCK 1: WARP ALL IMAGES ---
+    logger.info(f"E{experiment}/zone{zone}: Starting WARP block")
+    t0_warp = time.time()
+    pots = []  # List of dicts representing each pot
+
+    def warp_task(img_info):
         timestamp = img_info["time"]
         image_path = img_info["image_path"]
-
-        # Format timestamp for filename
         timestamp_str = timestamp.strftime("%Y-%m-%dT%H%M%S")
-
-        # Warp using pre-computed quadrilaterals
         warped_images = warp_with_quadrilaterals(image_path, quadrilaterals)
-        if warped_images is None:
-            logger.warning(f"E{experiment}/zone{zone} at {timestamp}: Warping failed")
-            continue
-
-        # Generate embeddings and save images for each pot
-        for plant_id, warped_b64 in enumerate(warped_images):
-            if warped_b64 is None:
-                embedding = None
-                image_file_path = None
-            else:
-                # Generate embedding
-                embedding = generate_embedding(warped_b64)
-
-                # Save warped pot image
-                try:
-                    warped_image = decode_image(warped_b64)
-                    image_filename = f"{timestamp_str}_plant{plant_id:02d}.jpg"
-                    image_file_path = processed_dir / image_filename
-                    warped_image.save(image_file_path)
-                    # Store relative path from /data/offline
-                    image_file_path = str(image_file_path.relative_to(OFFLINE_DIR))
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to save pot image for E{experiment}/zone{zone} plant{plant_id} at {timestamp}: {e}"
-                    )
-                    image_file_path = None
-
-            results.append(
+        if warped_images:
+            return [
                 {
                     "experiment": experiment,
                     "zone": zone,
                     "time": timestamp,
-                    "plant_id": plant_id,
-                    "embedding": embedding,
-                    "image_path": image_file_path,  # Add image path reference
+                    "plant_id": i,
+                    "warped_b64": b64,
+                    "timestamp_str": timestamp_str,
                 }
+                for i, b64 in enumerate(warped_images)
+            ]
+        return []
+
+    with ThreadPoolExecutor(max_workers=256) as executor:
+        futures = [executor.submit(warp_task, img) for img in zone_images]
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc=f"E{experiment}/Z{zone} Warping",
+            leave=False,
+        ):
+            pots.extend(future.result())
+
+    logger.info(
+        f"E{experiment}/zone{zone}: Warped {len(pots)} pots in {time.time() - t0_warp:.2f}s"
+    )
+
+    if not pots:
+        return []
+
+    # --- BLOCK 2: EMBED ALL POTS ---
+    logger.info(f"E{experiment}/zone{zone}: Starting EMBED block")
+    t0_embed = time.time()
+
+    def embed_task(pot):
+        pot["embedding"] = generate_embedding(pot["warped_b64"])
+        return pot
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        # Update pots in place (or create new list)
+        # We use map to keep order if needed, but list(executor.map) is fine
+        pots = list(
+            tqdm(
+                executor.map(embed_task, pots),
+                total=len(pots),
+                desc=f"E{experiment}/Z{zone} Embedding",
+                leave=False,
             )
+        )
+
+    logger.info(
+        f"E{experiment}/zone{zone}: Embedded {len(pots)} pots in {time.time() - t0_embed:.2f}s"
+    )
+
+    # --- BLOCK 3: DETECT ALL PLANTS ---
+    logger.info(f"E{experiment}/zone{zone}: Starting DETECT block")
+    t0_detect = time.time()
+
+    def detect_task(pot):
+        result = detect_plant(
+            pot["warped_b64"],
+            zone_key=zone_key,
+            plant_id=pot["plant_id"],
+            timestamp_str=pot["timestamp_str"],
+        )
+        if result:
+            pot["boxes"] = result.get("boxes", [])
+            pot["confidences"] = result.get("confidences", [])
+        else:
+            pot["boxes"] = []
+            pot["confidences"] = []
+        return pot
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        pots = list(
+            tqdm(
+                executor.map(detect_task, pots),
+                total=len(pots),
+                desc=f"E{experiment}/Z{zone} Detecting",
+                leave=False,
+            )
+        )
+
+    logger.info(
+        f"E{experiment}/zone{zone}: Detected plants in {time.time() - t0_detect:.2f}s"
+    )
+
+    # --- BLOCK 4: SEGMENT ALL PLANTS ---
+    logger.info(f"E{experiment}/zone{zone}: Starting SEGMENT block")
+    t0_segment = time.time()
+
+    def segment_task(pot):
+        if pot["boxes"]:
+            result = segment_plant(
+                pot["warped_b64"],
+                pot["boxes"],
+                pot["confidences"],
+                zone_key=zone_key,
+                plant_id=pot["plant_id"],
+                timestamp_str=pot["timestamp_str"],
+            )
+            if result and result.get("success"):
+                pot["mask_b64"] = result.get("mask")
+            else:
+                pot["mask_b64"] = None
+        else:
+            pot["mask_b64"] = None
+        return pot
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        pots = list(
+            tqdm(
+                executor.map(segment_task, pots),
+                total=len(pots),
+                desc=f"E{experiment}/Z{zone} Segmenting",
+                leave=False,
+            )
+        )
+
+    logger.info(
+        f"E{experiment}/zone{zone}: Segmented plants in {time.time() - t0_segment:.2f}s"
+    )
+
+    # --- BLOCK 5: STATS ALL PLANTS ---
+    logger.info(f"E{experiment}/zone{zone}: Starting STATS block")
+    t0_stats = time.time()
+
+    def stats_task(pot):
+        if pot["mask_b64"]:
+            result = compute_plant_stats(
+                pot["warped_b64"],
+                pot["mask_b64"],
+                zone_key=zone_key,
+                plant_id=pot["plant_id"],
+                timestamp_str=pot["timestamp_str"],
+            )
+            if result:
+                pot["stats"] = result.get("stats")
+            else:
+                pot["stats"] = None
+        else:
+            pot["stats"] = None
+        return pot
+
+    with ThreadPoolExecutor(max_workers=256) as executor:
+        pots = list(
+            tqdm(
+                executor.map(stats_task, pots),
+                total=len(pots),
+                desc=f"E{experiment}/Z{zone} Stats",
+                leave=False,
+            )
+        )
+
+    logger.info(
+        f"E{experiment}/zone{zone}: Computed stats in {time.time() - t0_stats:.2f}s"
+    )
+
+    # --- BLOCK 6: SAVE IMAGES ---
+    logger.info(f"E{experiment}/zone{zone}: Starting SAVE block")
+    t0_save = time.time()
+
+    def save_task(pot):
+        try:
+            warped_image = decode_image(pot["warped_b64"])
+            image_filename = f"{pot['timestamp_str']}_plant{pot['plant_id']:02d}.jpg"
+            image_file_path = processed_dir / image_filename
+            warped_image.save(image_file_path)
+            pot["image_path"] = str(image_file_path.relative_to(OFFLINE_DIR))
+        except Exception as e:
+            logger.warning(f"Failed to save image: {e}")
+            pot["image_path"] = None
+        return pot
+
+    with ThreadPoolExecutor(max_workers=256) as executor:
+        pots = list(
+            tqdm(
+                executor.map(save_task, pots),
+                total=len(pots),
+                desc=f"E{experiment}/Z{zone} Saving",
+                leave=False,
+            )
+        )
+
+    logger.info(
+        f"E{experiment}/zone{zone}: Saved images in {time.time() - t0_save:.2f}s"
+    )
+
+    # --- FINALIZE RESULTS ---
+    for pot in pots:
+        result_row = {
+            "experiment": pot["experiment"],
+            "zone": pot["zone"],
+            "time": pot["time"],
+            "plant_id": pot["plant_id"],
+            "embedding": pot["embedding"],
+            "image_path": pot["image_path"],
+        }
+        if pot.get("stats"):
+            result_row.update(pot["stats"])
+        results.append(result_row)
 
     return results
 
@@ -330,7 +685,7 @@ def transform_image_embeddings(df: pl.DataFrame, max_workers: int = 8) -> pl.Dat
 
     # Get unique images (experiment, zone, time combinations)
     unique_images = (
-        df.select(["experiment", "zone", "time"])
+        df.select(["experiment", "zone", "time", "image_name"])
         .unique()
         .sort("experiment", "zone", "time")
     )
@@ -341,9 +696,10 @@ def transform_image_embeddings(df: pl.DataFrame, max_workers: int = 8) -> pl.Dat
         experiment = row["experiment"]
         zone = row["zone"]
         timestamp = row["time"]
+        image_name = row["image_name"]
 
         # Find the image file
-        image_path = find_image_path(experiment, zone, timestamp)
+        image_path = find_image_path(experiment, zone, image_name)
         if image_path is None:
             continue
 
@@ -456,7 +812,7 @@ def transform_image_embeddings(df: pl.DataFrame, max_workers: int = 8) -> pl.Dat
     logger.info("\nZone-by-zone pot counts:")
     for row in zone_stats.iter_rows(named=True):
         num_pots = row["max_plant_id"] + 1 if row["max_plant_id"] is not None else 0
-        status = "✓" if num_pots == 18 else "⚠"
+        status = "✓" if num_pots == 18 or num_pots == 64 else "⚠"
         logger.info(
             f"  {status} E{row['experiment']}/zone{row['zone']}: {num_pots} pots detected across {row['num_images']} images"
         )
