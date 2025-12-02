@@ -6,7 +6,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 import threading
 
 import polars as pl
@@ -399,16 +398,10 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
         return results
 
     # Find the first 9:30 AM image as reference (daylight image)
-    target_tz = ZoneInfo("America/Edmonton")
     reference_image = None
 
     for img_info in zone_images:
         timestamp = img_info["time"]
-        if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=target_tz)
-        else:
-            timestamp = timestamp.astimezone(target_tz)
-
         if timestamp.hour == 9 and timestamp.minute == 30:
             reference_image = img_info
             break
