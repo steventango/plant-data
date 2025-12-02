@@ -225,14 +225,14 @@ def generate_embedding(image_data: str) -> Optional[list]:
             f"{EMBEDDINGS_URL}/predict",
             json={
                 "image_data": image_data,
-                "embedding_types": ["cls_token"],
+                "embedding_types": ["cls_token", "patch_features"],
             },
             timeout=30,
         )
         response.raise_for_status()
         result = response.json()
 
-        return result["cls_token"]
+        return result["cls_token"], result["patch_features"]
     except Exception as e:
         logger.error(f"Embedding generation failed: {e}")
         return None
@@ -485,7 +485,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
     t0_embed = time.time()
 
     def embed_task(pot):
-        pot["embedding"] = generate_embedding(pot["warped_b64"])
+        pot["cls_token"], pot["patch_features"] = generate_embedding(pot["warped_b64"])
         return pot
 
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -645,7 +645,8 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
             "zone": pot["zone"],
             "time": pot["time"],
             "plant_id": pot["plant_id"],
-            "embedding": pot["embedding"],
+            "cls_token": pot["cls_token"],
+            "patch_features": pot["patch_features"],
             "image_path": pot["image_path"],
         }
         if pot.get("stats"):
@@ -719,15 +720,34 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
 
     # Create new dataframe with embeddings
     logger.info(f"Creating new dataset with {len(all_results)} plant detections")
-    df_new = pl.DataFrame(all_results)
+    df_new = pl.DataFrame(
+        all_results,
+        schema={
+            "experiment": df.schema["experiment"],
+            "zone": df.schema["zone"],
+            "time": df.schema["time"],
+            "plant_id": pl.Int32,
+            "image_path": pl.String,
+            "cls_token": pl.Array(pl.Float32, 768),
+            "patch_features": pl.Array(pl.Float32, (196, 768)),
+        },
+    )
 
-    # Get the original dataset columns we want to preserve (excluding plant_id, image_path, embedding which we're adding/reassigning)
+    # Get the original dataset columns we want to preserve (excluding plant_id, image_path, cls_token, patch_features which we're adding/reassigning)
     # We'll join on (experiment, zone, time) and take the first match for shared columns
     original_cols_to_keep = [
         col
         for col in df.columns
         if col
-        not in ["plant_id", "embedding", "image_path", "experiment", "zone", "time"]
+        not in [
+            "plant_id",
+            "cls_token",
+            "patch_features",
+            "image_path",
+            "experiment",
+            "zone",
+            "time",
+        ]
     ]
 
     # For each (experiment, zone, time), get one representative row from original dataset
@@ -743,18 +763,20 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     # Reorder columns to put key columns first
-    key_cols = ["experiment", "zone", "time", "plant_id", "image_path", "embedding"]
+    key_cols = [
+        "experiment",
+        "zone",
+        "time",
+        "plant_id",
+        "image_path",
+        "cls_token",
+        "patch_features",
+    ]
     other_cols = [col for col in df_with_embeddings.columns if col not in key_cols]
     df_with_embeddings = df_with_embeddings.select(key_cols + other_cols)
 
-    # Convert embeddings to Array[Float32] for efficiency
-    logger.info("Converting embeddings to Array[Float32]")
-    df_with_embeddings = df_with_embeddings.with_columns(
-        pl.col("embedding").list.eval(pl.element().cast(pl.Float32)).alias("embedding")
-    )
-
     # Print statistics
-    total_embeddings = df_new.filter(pl.col("embedding").is_not_null()).height
+    total_embeddings = df_new.filter(pl.col("cls_token").is_not_null()).height
     total_plants = len(df_new)
     logger.info(f"Successfully generated {total_embeddings}/{total_plants} embeddings")
     logger.info(f"Original dataset had {len(df)} rows")
