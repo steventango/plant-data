@@ -162,15 +162,17 @@ def create_date_colors(df: pl.DataFrame) -> np.ndarray:
     timestamps = df["time"].to_numpy()
     min_time = timestamps.min()
     max_time = timestamps.max()
-    
+
     # Calculate total seconds range
-    total_seconds = (max_time - min_time).astype('timedelta64[s]').astype(float)
-    
+    total_seconds = (max_time - min_time).astype("timedelta64[s]").astype(float)
+
     if total_seconds == 0:
         return np.full(len(timestamps), 0.5)
 
     # Normalize
-    colors = (timestamps - min_time).astype('timedelta64[s]').astype(float) / total_seconds
+    colors = (timestamps - min_time).astype("timedelta64[s]").astype(
+        float
+    ) / total_seconds
     return colors
 
 
