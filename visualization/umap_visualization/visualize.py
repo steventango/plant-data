@@ -1,7 +1,5 @@
-"""Visualization utilities for UMAP embeddings."""
-
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
