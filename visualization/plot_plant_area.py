@@ -8,9 +8,9 @@ import pandas as pd
 import polars as pl
 import seaborn as sns
 import numpy as np
-
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+VERSION = "v16"
 
 def main():
     parser = argparse.ArgumentParser(
@@ -19,7 +19,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default="/data/plant-rl/offline/cleaned_offline_dataset_continuous_v16.parquet",
+        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
         help="Path to parquet file",
     )
     parser.add_argument(

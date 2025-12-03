@@ -1,0 +1,1 @@
+python visualization/plot_plant_area.py --group-by-agent
