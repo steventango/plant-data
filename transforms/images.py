@@ -523,7 +523,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
             pot["confidences"] = []
         return pot
 
-    with ThreadPoolExecutor(max_workers=32) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         pots = list(
             tqdm(
                 executor.map(detect_task, pots),
