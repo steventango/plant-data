@@ -1,4 +1,5 @@
 from .actions import transform_action, transform_action_traces
+from .drop import transform_drop_old_cols
 from .images import transform_image_embeddings
 from .labels import import_labels
 from .normalization import (
@@ -15,6 +16,7 @@ from .terminal import transform_terminal
 __all__ = [
     "transform_action",
     "transform_action_traces",
+    "transform_drop_old_cols",
     "transform_image_embeddings",
     "import_labels",
     "compute_normalization_stats",
