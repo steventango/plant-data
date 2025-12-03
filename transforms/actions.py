@@ -38,14 +38,14 @@ def compute_action_coefficients(action: np.ndarray) -> np.ndarray:
 
 def transform_action(df: pl.DataFrame) -> pl.DataFrame:
     # shift action backwards
-    df = df.with_columns(pl.col("action.0").shift(-1).over("plant_id"))
-    df = df.with_columns(pl.col("action.1").shift(-1).over("plant_id"))
-    df = df.with_columns(pl.col("action.2").shift(-1).over("plant_id"))
-    df = df.with_columns(pl.col("action.3").shift(-1).over("plant_id"))
-    df = df.with_columns(pl.col("action.4").shift(-1).over("plant_id"))
-    df = df.with_columns(pl.col("action.5").shift(-1).over("plant_id"))
+    df = df.with_columns(pl.col("action.0").shift(-1))
+    df = df.with_columns(pl.col("action.1").shift(-1))
+    df = df.with_columns(pl.col("action.2").shift(-1))
+    df = df.with_columns(pl.col("action.3").shift(-1))
+    df = df.with_columns(pl.col("action.4").shift(-1))
+    df = df.with_columns(pl.col("action.5").shift(-1))
 
-    groups = df.group_by("time", "plant_id")
+    groups = df.group_by("time")
     groups_with_counts = groups.agg(pl.len())
     # Assert that the count for all groups is 1
     assert (groups_with_counts["len"] == 1).all()
@@ -58,7 +58,7 @@ def transform_action(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("action.4").mean(),
         pl.col("action.5").mean(),
         pl.col("clean_area").mean(),
-    ).sort("time", "plant_id")
+    ).sort("time")
     df2 = df2.with_columns(
         pl.concat_arr(
             [
@@ -122,7 +122,6 @@ def transform_action(df: pl.DataFrame) -> pl.DataFrame:
         df2.select(
             [
                 "time",
-                "plant_id",
                 "discrete_action",
                 "action_coefficients",
                 "red_coef",
@@ -130,14 +129,14 @@ def transform_action(df: pl.DataFrame) -> pl.DataFrame:
                 "blue_coef",
             ]
         ),
-        on=["time", "plant_id"],
+        on="time",
         how="left",
     )
     return df
 
 
 def transform_action_traces(df):
-    df = df.sort("plant_id", "time")
+    df = df.sort("time")
     action_cols = [
         "action.0",
         "action.1",
@@ -178,15 +177,15 @@ def transform_action_traces(df):
         df = df.with_columns(
             pl.col("discrete_action_0")
             .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone", "plant_id")
+            .over("experiment", "zone")
             .alias(f"discrete_action_trace_0_{beta}"),
             pl.col("discrete_action_1")
             .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone", "plant_id")
+            .over("experiment", "zone")
             .alias(f"discrete_action_trace_1_{beta}"),
             pl.col("discrete_action_2")
             .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone", "plant_id")
+            .over("experiment", "zone")
             .alias(f"discrete_action_trace_2_{beta}"),
         )
     return df

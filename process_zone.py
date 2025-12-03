@@ -69,18 +69,27 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
             "day"
         ),
     )
+    df = df.filter(
+        (pl.col("time").dt.time() >= time(9, 30, tzinfo=tzinfo))
+        & (pl.col("time").dt.time() < time(20, 30, tzinfo=tzinfo))
+    )
+    df = transform_action(df)
+    # transform action by averaging over the day between 9:30 and 20:30
+    df = df.with_columns(
+        pl.col("red_coef").mean().over("experiment", "zone").alias("red_coef"),
+        pl.col("white_coef").mean().over("experiment", "zone").alias("white_coef"),
+        pl.col("blue_coef").mean().over("experiment", "zone").alias("blue_coef"),
+    )
     # daily subsampling
     df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
-    # # hourly subsampling
-    # df = df.filter(pl.col("time").dt.minute() == 30)
     
+    df = transform_action_traces(df)
+
     df = transform_image_embeddings(df)
 
     df = transform_state(df)
-    df = transform_action(df)
-    df = transform_action_traces(df)
-    df = transform_reward(df)
     df = transform_terminal(df)
+    df = transform_reward(df)
 
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))
     print(
