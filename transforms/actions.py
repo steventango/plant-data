@@ -154,38 +154,26 @@ def transform_action_traces(df):
         df = df.with_columns(
             pl.col(col)
             .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone", "plant_id")
+            .over("experiment", "zone")
+            .shift(1)
+            .fill_null(0)
             .alias(f"{col}_trace_{beta}"),
         )
     # Create one-hot for discrete_action
-    df = df.with_columns(
-        pl.when(pl.col("discrete_action") == 0)
-        .then(1.0)
-        .otherwise(0.0)
-        .alias("discrete_action_0"),
-        pl.when(pl.col("discrete_action") == 1)
-        .then(1.0)
-        .otherwise(0.0)
-        .alias("discrete_action_1"),
-        pl.when(pl.col("discrete_action") == 2)
-        .then(1.0)
-        .otherwise(0.0)
-        .alias("discrete_action_2"),
-    )
-    for beta in betas:
+    for col, beta in product(range(3), betas):
+        df = df.with_columns(
+            pl.when(pl.col("discrete_action") == col)
+            .then(1.0)
+            .otherwise(0.0)
+            .alias(f"discrete_action_{col}"),
+        )
         alpha = 1 - beta
         df = df.with_columns(
-            pl.col("discrete_action_0")
+            pl.col(f"discrete_action_{col}")
             .ewm_mean(alpha=alpha, adjust=True)
             .over("experiment", "zone")
-            .alias(f"discrete_action_trace_0_{beta}"),
-            pl.col("discrete_action_1")
-            .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone")
-            .alias(f"discrete_action_trace_1_{beta}"),
-            pl.col("discrete_action_2")
-            .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone")
-            .alias(f"discrete_action_trace_2_{beta}"),
+            .shift(1)
+            .fill_null(0)
+            .alias(f"discrete_action_trace_{col}_{beta}"),
         )
     return df

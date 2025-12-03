@@ -59,7 +59,6 @@ def test_coefficient_traces():
 
     # Create sample data with a plant that transitions between different light configurations
     times = list(range(10))
-    plant_ids = ["plant_1"] * 10
 
     # Create actions that transition from RED -> WHITE -> BLUE
     actions = []
@@ -77,7 +76,6 @@ def test_coefficient_traces():
     # Create DataFrame
     data = {
         "time": times,
-        "plant_id": plant_ids,
         "experiment": ["exp_1"] * 10,  # Dummy values
         "zone": ["zone_1"] * 10,  # Dummy values
         "clean_area": [100.0] * 10,  # Dummy values
@@ -102,7 +100,6 @@ def test_coefficient_traces():
         df.select(
             [
                 "time",
-                "plant_id",
                 "red_coef",
                 "white_coef",
                 "blue_coef",
