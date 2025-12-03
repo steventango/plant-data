@@ -90,7 +90,9 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     
     df = transform_action_traces(df)
 
-    df = transform_image_embeddings(df)
+    # Pass output directory for image embeddings (same directory as parquet output)
+    output_dir = Path(output_path).parent
+    df = transform_image_embeddings(df, output_dir=output_dir)
 
     df = transform_state(df)
     df = transform_terminal(df)

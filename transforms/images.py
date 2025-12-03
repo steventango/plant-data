@@ -70,12 +70,13 @@ def find_image_path(experiment: int, zone: int, image_name: str) -> Optional[Pat
     return None
 
 
-def detect_pots_reference(image_path: Path, zone_key: tuple) -> Optional[dict]:
+def detect_pots_reference(image_path: Path, zone_key: tuple, output_dir: Optional[Path] = None) -> Optional[dict]:
     """Detect pots in a reference image to get quadrilaterals.
 
     Args:
         image_path: Path to the reference image
         zone_key: Tuple of (experiment, zone) for saving visualization
+        output_dir: Optional output directory for visualizations
 
     Returns:
         Dictionary with detection results (boxes, quadrilaterals, etc.), or None if failed
@@ -84,6 +85,9 @@ def detect_pots_reference(image_path: Path, zone_key: tuple) -> Optional[dict]:
         # Load image
         image = Image.open(image_path).convert("RGB")
         image_data = encode_image(image)
+
+        # Determine visualization directory
+        viz_dir = (output_dir / "visualizations") if output_dir else (OFFLINE_DIR / "visualizations")
 
         # 1. Detect pots
         detect_response = get_session().post(
@@ -107,8 +111,7 @@ def detect_pots_reference(image_path: Path, zone_key: tuple) -> Optional[dict]:
         # Save detect visualization if available
         if "visualization" in detect_result and detect_result["visualization"]:
             try:
-                viz_dir = OFFLINE_DIR / "visualizations"
-                viz_dir.mkdir(exist_ok=True)
+                viz_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(detect_result["visualization"])
                 viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_detect.jpg"
                 viz_image.save(viz_path)
@@ -137,8 +140,7 @@ def detect_pots_reference(image_path: Path, zone_key: tuple) -> Optional[dict]:
         # Save segment visualization if available
         if "visualization" in segment_result and segment_result["visualization"]:
             try:
-                viz_dir = OFFLINE_DIR / "visualizations"
-                viz_dir.mkdir(exist_ok=True)
+                viz_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(segment_result["visualization"])
                 viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_segment.jpg"
                 viz_image.save(viz_path)
@@ -163,8 +165,7 @@ def detect_pots_reference(image_path: Path, zone_key: tuple) -> Optional[dict]:
         # Save quad visualization if available
         if "visualization" in quad_result and quad_result["visualization"]:
             try:
-                viz_dir = OFFLINE_DIR / "visualizations"
-                viz_dir.mkdir(exist_ok=True)
+                viz_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(quad_result["visualization"])
                 viz_path = viz_dir / f"E{zone_key[0]}_zone{zone_key[1]}_quad.jpg"
                 viz_image.save(viz_path)
@@ -243,6 +244,7 @@ def detect_plant(
     zone_key: tuple = None,
     plant_id: int = None,
     timestamp_str: str = None,
+    output_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """Detect plant in a warped pot image."""
     try:
@@ -263,13 +265,15 @@ def detect_plant(
             and result["visualization"]
         ):
             try:
-                viz_dir = OFFLINE_DIR / "visualizations" / "plant_detect"
-                viz_dir.mkdir(parents=True, exist_ok=True)
+                # Save to images/{plant_id}/{timestamp}_detect.jpg
+                if output_dir:
+                    plant_dir = output_dir / "images" / str(plant_id)
+                else:
+                    experiment, zone = zone_key
+                    plant_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images" / str(plant_id)
+                plant_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(result["visualization"])
-                viz_path = (
-                    viz_dir
-                    / f"E{zone_key[0]}_zone{zone_key[1]}_plant{plant_id:02d}_{timestamp_str}_detect.jpg"
-                )
+                viz_path = plant_dir / f"{timestamp_str}_detect.jpg"
                 viz_image.save(viz_path)
                 logger.debug(f"Saved plant detect visualization to {viz_path}")
             except Exception as e:
@@ -288,6 +292,7 @@ def segment_plant(
     zone_key: tuple = None,
     plant_id: int = None,
     timestamp_str: str = None,
+    output_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """Segment plant given detection boxes."""
     try:
@@ -313,13 +318,15 @@ def segment_plant(
             and result["visualization"]
         ):
             try:
-                viz_dir = OFFLINE_DIR / "visualizations" / "plant_segment"
-                viz_dir.mkdir(parents=True, exist_ok=True)
+                # Save to images/{plant_id}/{timestamp}_segment.jpg
+                if output_dir:
+                    plant_dir = output_dir / "images" / str(plant_id)
+                else:
+                    experiment, zone = zone_key
+                    plant_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images" / str(plant_id)
+                plant_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(result["visualization"])
-                viz_path = (
-                    viz_dir
-                    / f"E{zone_key[0]}_zone{zone_key[1]}_plant{plant_id:02d}_{timestamp_str}_segment.jpg"
-                )
+                viz_path = plant_dir / f"{timestamp_str}_segment.jpg"
                 viz_image.save(viz_path)
                 logger.debug(f"Saved plant segment visualization to {viz_path}")
             except Exception as e:
@@ -337,6 +344,7 @@ def compute_plant_stats(
     zone_key: tuple = None,
     plant_id: int = None,
     timestamp_str: str = None,
+    output_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """Compute plant statistics given mask."""
     try:
@@ -363,13 +371,15 @@ def compute_plant_stats(
             and result["visualization"]
         ):
             try:
-                viz_dir = OFFLINE_DIR / "visualizations" / "plant_stats"
-                viz_dir.mkdir(parents=True, exist_ok=True)
+                # Save to images/{plant_id}/{timestamp}_stats.jpg
+                if output_dir:
+                    plant_dir = output_dir / "images" / str(plant_id)
+                else:
+                    experiment, zone = zone_key
+                    plant_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images" / str(plant_id)
+                plant_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(result["visualization"])
-                viz_path = (
-                    viz_dir
-                    / f"E{zone_key[0]}_zone{zone_key[1]}_plant{plant_id:02d}_{timestamp_str}_stats.jpg"
-                )
+                viz_path = plant_dir / f"{timestamp_str}_stats.jpg"
                 viz_image.save(viz_path)
                 logger.debug(f"Saved plant stats visualization to {viz_path}")
             except Exception as e:
@@ -381,12 +391,13 @@ def compute_plant_stats(
         return None
 
 
-def process_zone_images(zone_key: tuple, zone_images: list) -> list:
+def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional[Path] = None) -> list:
     """Process all images for a single zone using block-based execution.
 
     Args:
         zone_key: Tuple of (experiment, zone)
         zone_images: List of dicts with 'time' and 'image_path' keys (sorted by time)
+        output_dir: Optional output directory for processed images and visualizations
 
     Returns:
         List of result dictionaries for all detected plants across all images
@@ -418,7 +429,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
 
     # Detect pots in reference image
     t0 = time.time()
-    detection_result = detect_pots_reference(reference_image["image_path"], zone_key)
+    detection_result = detect_pots_reference(reference_image["image_path"], zone_key, output_dir)
     logger.info(
         f"E{experiment}/zone{zone}: Reference detection took {time.time() - t0:.2f}s"
     )
@@ -433,11 +444,12 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
         logger.warning(f"E{experiment}/zone{zone}: No pots detected in reference image")
         return results
 
-    # Create output directory
-    processed_dir = (
-        OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
-    )
-    processed_dir.mkdir(parents=True, exist_ok=True)
+    # Base directory for processed images (will create plant subdirectories)
+    if output_dir:
+        images_base_dir = output_dir / "images"
+    else:
+        images_base_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
+    images_base_dir.mkdir(parents=True, exist_ok=True)
 
     # --- BLOCK 1: WARP ALL IMAGES ---
     logger.info(f"E{experiment}/zone{zone}: Starting WARP block")
@@ -514,6 +526,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
             zone_key=zone_key,
             plant_id=pot["plant_id"],
             timestamp_str=pot["timestamp_str"],
+            output_dir=output_dir,
         )
         if result:
             pot["boxes"] = result.get("boxes", [])
@@ -550,6 +563,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
                 zone_key=zone_key,
                 plant_id=pot["plant_id"],
                 timestamp_str=pot["timestamp_str"],
+                output_dir=output_dir,
             )
             if result and result.get("success"):
                 pot["mask_b64"] = result.get("mask")
@@ -585,6 +599,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
                 zone_key=zone_key,
                 plant_id=pot["plant_id"],
                 timestamp_str=pot["timestamp_str"],
+                output_dir=output_dir,
             )
             if result:
                 pot["stats"] = result.get("stats")
@@ -614,11 +629,19 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
 
     def save_task(pot):
         try:
+            # Save to images/{plant_id}/{timestamp}.jpg
+            plant_dir = images_base_dir / str(pot["plant_id"])
+            plant_dir.mkdir(parents=True, exist_ok=True)
+            
             warped_image = decode_image(pot["warped_b64"])
-            image_filename = f"{pot['timestamp_str']}_plant{pot['plant_id']:02d}.jpg"
-            image_file_path = processed_dir / image_filename
+            image_filename = f"{pot['timestamp_str']}.jpg"
+            image_file_path = plant_dir / image_filename
             warped_image.save(image_file_path)
-            pot["image_path"] = str(image_file_path.relative_to(OFFLINE_DIR))
+            # Store relative path from output_dir if provided, else from OFFLINE_DIR
+            if output_dir:
+                pot["image_path"] = str(image_file_path.relative_to(output_dir))
+            else:
+                pot["image_path"] = str(image_file_path.relative_to(OFFLINE_DIR))
         except Exception as e:
             logger.warning(f"Failed to save image: {e}")
             pot["image_path"] = None
@@ -656,7 +679,7 @@ def process_zone_images(zone_key: tuple, zone_images: list) -> list:
     return results
 
 
-def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
+def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = None) -> pl.DataFrame:
     """Transform to add image embeddings to a daily dataset.
 
     This function:
@@ -669,6 +692,9 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
 
     Args:
         df: DataFrame with experiment, zone, and time columns
+        output_dir: Optional output directory for processed images and visualizations.
+                   If provided, images will be saved to output_dir/images/ and
+                   visualizations to output_dir/visualizations/
 
     Returns:
         DataFrame with added plant_id, embedding, and image_path columns.
@@ -715,7 +741,7 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
     all_results = []
 
     for zone_key, images in tqdm(zone_groups.items()):
-        result = process_zone_images(zone_key, images)
+        result = process_zone_images(zone_key, images, output_dir)
         all_results.extend(result)
 
     # Create new dataframe with embeddings
