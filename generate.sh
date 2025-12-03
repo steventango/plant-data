@@ -30,7 +30,7 @@ uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet
 uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet4/alliance-zone04
 uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet5/alliance-zone05
 uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet6/alliance-zone06
-uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet8/alliance-zone09
+uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet8/alliance-zone08
 uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet9/alliance-zone09
 uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet10/alliance-zone10
 uv run python process_zone.py --data-path /data/plant-rl/online/E13/P1/Dirichlet11/alliance-zone11
