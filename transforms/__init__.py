@@ -4,6 +4,7 @@ from .labels import import_labels
 from .outliers import transform_outlier_detection
 from .rewards import transform_reward
 from .states import transform_state
+from .terminal import transform_terminal
 
 __all__ = [
     "transform_action",
@@ -13,4 +14,5 @@ __all__ = [
     "transform_outlier_detection",
     "transform_reward",
     "transform_state",
+    "transform_terminal",
 ]

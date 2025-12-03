@@ -12,6 +12,7 @@ from transforms import (
     transform_image_embeddings,
     transform_reward,
     transform_state,
+    transform_terminal,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -79,6 +80,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = transform_action(df)
     df = transform_action_traces(df)
     df = transform_reward(df)
+    df = transform_terminal(df)
 
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))
     print(
@@ -88,9 +90,6 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     )
     df = df.with_columns(
         (pl.col("time") == df["time"].max()).alias("truncated"),
-    )
-    df = df.with_columns(
-        (pl.col("day") == 13).alias("terminal"),
     )
     print(f"E{exp_id}/zone{zone_id}: day min {df['day'].min()}, max {df['day'].max()}")
     
