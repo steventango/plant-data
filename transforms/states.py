@@ -7,12 +7,13 @@ TUKEY_K = 1.5  # Conservative k factor for Tukey fences
 
 # EWM outlier detection (within each plant over time)
 CLEAN_AREA_LOWER_THRESHOLD = 0.5  # Reject if area < (1 - threshold) * ewm_mean
-CLEAN_AREA_UPPER_THRESHOLD = 0.5  # Reject if area > (1 + threshold) * ewm_mean
+CLEAN_AREA_UPPER_THRESHOLD = 1  # Reject if area > (1 + threshold) * ewm_mean
 MINIMUM_AREA_COUNT = 1  # Minimum observations before applying outlier detection
 EWM_SPAN = 10  # Span for exponential weighted mean (higher = smoother)
 
 # Morphology features that should be replaced together with area when outlier detected
 MORPHOLOGY_FEATURES = [
+    "in_bounds",
     "area",
     "convex_hull_area",
     "solidity",
@@ -23,6 +24,7 @@ MORPHOLOGY_FEATURES = [
     "center_of_mass_x",
     "center_of_mass_y",
     "convex_hull_vertices",
+    "object_in_frame",
     "ellipse_center_x",
     "ellipse_center_y",
     "ellipse_major_axis",
@@ -98,9 +100,9 @@ def apply_tukey_outlier_detection(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def compute_clean_features_for_group(group_df: pl.DataFrame) -> pl.DataFrame:
+def compute_clean_features_for_plant(plant_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Compute clean morphology features for a single (experiment, zone) group.
+    Compute clean morphology features for a single plant's time series.
 
     This function implements robust feature cleaning by:
     1. Using area_after_tukey (with cross-plant outliers already set to 0)
@@ -114,23 +116,23 @@ def compute_clean_features_for_group(group_df: pl.DataFrame) -> pl.DataFrame:
     - The replacement values depend on prior clean values
     """
     # Sort by time to ensure proper ordering
-    group_df = group_df.sort("time")
+    plant_df = plant_df.sort("time")
 
     # Use area_after_tukey if available, otherwise fall back to area
-    area_col = "area_after_tukey" if "area_after_tukey" in group_df.columns else "area"
+    area_col = "area_after_tukey" if "area_after_tukey" in plant_df.columns else "area"
 
     # Extract areas as a list for row-by-row processing
-    areas = group_df[area_col].to_list()
+    areas = plant_df[area_col].to_list()
     n = len(areas)
 
     if n == 0:
-        return group_df.with_columns(pl.lit(None).cast(pl.Float64).alias("clean_area"))
+        return plant_df.with_columns(pl.lit(None).cast(pl.Float64).alias("clean_area"))
 
     # Determine which morphology features are present in the dataframe
-    available_features = [f for f in MORPHOLOGY_FEATURES if f in group_df.columns]
+    available_features = [f for f in MORPHOLOGY_FEATURES if f in plant_df.columns]
 
     # Extract all feature values as lists for row-by-row processing
-    feature_values = {f: group_df[f].to_list() for f in available_features}
+    feature_values = {f: plant_df[f].to_list() for f in available_features}
 
     # Initialize tracking variables for all features
     clean_features = {f: [] for f in available_features}
@@ -215,9 +217,32 @@ def compute_clean_features_for_group(group_df: pl.DataFrame) -> pl.DataFrame:
                 pl.Series(f"clean_{f}", clean_features[f]).cast(pl.Float64)
             )
 
-    result = group_df.with_columns(new_columns)
+    result = plant_df.with_columns(new_columns)
 
     return result
+
+
+def compute_clean_features_for_group(group_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Compute clean morphology features for all plants in an (experiment, zone) group.
+    
+    Processes each plant_id independently to maintain separate EWM states.
+    """
+    # Check if plant_id column exists
+    if "plant_id" not in group_df.columns:
+        # No plant_id column, treat entire group as single plant
+        return compute_clean_features_for_plant(group_df)
+    
+    # Process each plant independently
+    result_frames = []
+    for plant_id, plant_group in group_df.group_by("plant_id", maintain_order=True):
+        cleaned_plant = compute_clean_features_for_plant(plant_group)
+        result_frames.append(cleaned_plant)
+    
+    if not result_frames:
+        return group_df.with_columns(pl.lit(None).cast(pl.Float64).alias("clean_area"))
+    
+    return pl.concat(result_frames)
 
 
 # Keep the old function name as an alias for backwards compatibility
