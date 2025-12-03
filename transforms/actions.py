@@ -106,23 +106,10 @@ def transform_action(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("action_coefficients").list.get(1).alias("white_coef"),
         pl.col("action_coefficients").list.get(2).alias("blue_coef"),
     )
-
-    eps = 0.1
-    df2 = df2.with_columns(
-        pl.when(pl.col("red_diff") < eps)
-        .then(0)
-        .when(pl.col("white_diff") < eps)
-        .then(1)
-        .when(pl.col("blue_diff") < eps)
-        .then(2)
-        .otherwise(None)
-        .alias("discrete_action")
-    )
     df = df.join(
         df2.select(
             [
                 "time",
-                "discrete_action",
                 "action_coefficients",
                 "red_coef",
                 "white_coef",
@@ -158,22 +145,5 @@ def transform_action_traces(df):
             .shift(1)
             .fill_null(0)
             .alias(f"{col}_trace_{beta}"),
-        )
-    # Create one-hot for discrete_action
-    for col, beta in product(range(3), betas):
-        df = df.with_columns(
-            pl.when(pl.col("discrete_action") == col)
-            .then(1.0)
-            .otherwise(0.0)
-            .alias(f"discrete_action_{col}"),
-        )
-        alpha = 1 - beta
-        df = df.with_columns(
-            pl.col(f"discrete_action_{col}")
-            .ewm_mean(alpha=alpha, adjust=True)
-            .over("experiment", "zone")
-            .shift(1)
-            .fill_null(0)
-            .alias(f"discrete_action_trace_{col}_{beta}"),
         )
     return df

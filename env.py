@@ -14,7 +14,6 @@ class MockEnv(gym.Env):
         stats: dict,
         cols: list,
         include_action_traces: bool = True,
-        use_continuous_actions: bool = False,
     ):
         super().__init__()
         self.df = df.sort("experiment", "zone", "plant_id", "time")
@@ -33,7 +32,6 @@ class MockEnv(gym.Env):
         self.truncated_row_index = 0
         self.completed_episodes = set()  # Track completed episodes
         self.include_action_traces = include_action_traces
-        self.use_continuous_actions = use_continuous_actions
         self.stats = stats
         # Set observation space: PLANT STATS, ACTION TRACE, EMBEDDING
         self.cols = cols
@@ -52,11 +50,8 @@ class MockEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=self.low, high=self.high, dtype=np.float32
         )
-        if use_continuous_actions:
-            # Action space: [red_coef, white_coef, blue_coef]
-            self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
-        else:
-            self.action_space = spaces.Discrete(3)
+        # Action space: [red_coef, white_coef, blue_coef]
+        self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
 
     def _get_observation(self) -> Any:
         # return a vector with the following values:
@@ -84,30 +79,18 @@ class MockEnv(gym.Env):
 
     def _get_action(self) -> int | np.ndarray:
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
-            if self.use_continuous_actions:
-                return np.array([0.0, 0.0, 0.0], dtype=np.float32)
-            else:
-                return 0
+            return np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
         row = self.plant_df.slice(self.current_row_index, 1)
         if row.is_empty():
-            if self.use_continuous_actions:
-                return np.array([0.0, 0.0, 0.0], dtype=np.float32)
-            else:
-                return 0
+            return np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
-        if self.use_continuous_actions:
-            # Return continuous action coefficients
-            red_coef = row["red_coef"][0] if row["red_coef"][0] is not None else 0.0
-            white_coef = (
-                row["white_coef"][0] if row["white_coef"][0] is not None else 0.0
-            )
-            blue_coef = row["blue_coef"][0] if row["blue_coef"][0] is not None else 0.0
-            return np.array([red_coef, white_coef, blue_coef], dtype=np.float32)
-        else:
-            # Return discrete action
-            discrete_action = row["discrete_action"][0]
-            return int(discrete_action) if discrete_action is not None else 0
+        red_coef = row["red_coef"][0] if row["red_coef"][0] is not None else 0.0
+        white_coef = (
+            row["white_coef"][0] if row["white_coef"][0] is not None else 0.0
+        )
+        blue_coef = row["blue_coef"][0] if row["blue_coef"][0] is not None else 0.0
+        return np.array([red_coef, white_coef, blue_coef], dtype=np.float32)
 
     def is_done(self) -> bool:
         """Check if all episodes have been completed"""

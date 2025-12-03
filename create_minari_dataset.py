@@ -39,26 +39,26 @@ def main():
     stats = load_normalization_stats(input_dir)
 
     cols = [
-        "area",
-        "convex_hull_area",
-        "solidity",
-        "perimeter",
-        "width",
-        "height",
-        "longest_path",
-        "center_of_mass_x",
-        "center_of_mass_y",
-        "convex_hull_vertices",
-        "ellipse_center_x",
-        "ellipse_center_y",
-        "ellipse_major_axis",
-        "ellipse_minor_axis",
-        "ellipse_angle",
-        "ellipse_eccentricity",
+        "clean_area",
+        "clean_convex_hull_area",
+        "clean_solidity",
+        "clean_perimeter",
+        "clean_width",
+        "clean_height",
+        "clean_longest_path",
+        "clean_center_of_mass_x",
+        "clean_center_of_mass_y",
+        "clean_convex_hull_vertices",
+        "clean_ellipse_center_x",
+        "clean_ellipse_center_y",
+        "clean_ellipse_major_axis",
+        "clean_ellipse_minor_axis",
+        "clean_ellipse_angle",
+        "clean_ellipse_eccentricity",
     ]
 
     # Create continuous action dataset
-    mock_env = MockEnv(df, stats, cols, use_continuous_actions=True)
+    mock_env = MockEnv(df, stats, cols)
     env = DataCollector(mock_env, record_infos=True)
 
     # Run episodes until environment indicates all data has been processed
