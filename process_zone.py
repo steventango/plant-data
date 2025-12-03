@@ -31,6 +31,8 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = df.with_columns(
         pl.col("time").dt.replace(second=0, microsecond=0, ambiguous="earliest")
     )
+    # drop plant_ids other than 0
+    df = df.filter(pl.col("plant_id") == 0)
     assert df.filter((pl.col("time").dt.minute() % 5 != 0)).is_empty()
     # fill in missing time steps, print how many were missing
     min_time: datetime = df["time"].min()  # type: ignore
