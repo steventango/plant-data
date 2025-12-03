@@ -4,13 +4,13 @@ from datetime import time
 from pathlib import Path
 
 import polars as pl
-from tqdm import tqdm
 
 from config import VERSION, tzinfo
 from transforms import (
     transform_action_traces,
-    transform_outlier_detection
+    transform_outlier_detection,
 )
+from transforms.normalization import compute_normalization_stats, save_normalization_stats
 
 logging.basicConfig(level=logging.INFO)
 
@@ -95,7 +95,6 @@ def main():
     lazy_frames = []
     for file in files:
         print(file)
-    for file in tqdm(files):
         lf = pl.scan_parquet(file)
         lazy_frames.append(lf)
     
@@ -108,12 +107,6 @@ def main():
 
     print(df.head())
 
-    # Create daily dataset
-    df_daily = subsample(df, "daily")
-
-    print(df_daily.select("reward").describe())
-    print(df_daily[["time", "day", "red_coef", "white_coef", "blue_coef", "reward"]])
-
     # Save to parquet
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -122,10 +115,29 @@ def main():
     logging.info(f"Saving full dataset to {path}")
     df.write_parquet(path)
 
-    # Save the daily continuous dataset
-    path = output_dir / f"mixed-daily-{VERSION}.parquet"
-    logging.info(f"Saving daily dataset to {path}")
-    df_daily.write_parquet(path)
+    # Compute and save normalization stats for the full dataset
+    logging.info("Computing normalization statistics for full dataset...")
+    full_stats = compute_normalization_stats(df)
+    full_stats_path = output_dir / f"normalization-stats-{VERSION}.json"
+    save_normalization_stats(full_stats, full_stats_path)
+
+    # # Create daily dataset
+    # df_daily = subsample(df, "daily")
+
+    # print(df_daily.select("reward").describe())
+    # print(df_daily[["time", "day", "red_coef", "white_coef", "blue_coef", "reward"]])
+
+    # # Save the daily continuous dataset
+    # path = output_dir / f"mixed-daily-{VERSION}.parquet"
+    # logging.info(f"Saving daily dataset to {path}")
+    # df_daily.write_parquet(path)
+
+    # # Compute and save normalization stats for the daily dataset
+    # logging.info("Computing normalization statistics for daily dataset...")
+    # daily_stats = compute_normalization_stats(df_daily)
+    # daily_stats_path = output_dir / f"normalization-stats-daily-{VERSION}.json"
+    # save_normalization_stats(daily_stats, daily_stats_path)
+
 
 
 if __name__ == "__main__":
