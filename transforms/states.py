@@ -282,11 +282,32 @@ def transform_area(df: pl.DataFrame) -> pl.DataFrame:
     return result
 
 
+def transform_wall_time(df: pl.DataFrame) -> pl.DataFrame:
+    df = df.with_columns(
+        pl.col("time")
+        .min()
+        .over(["experiment", "zone"])
+        .dt.truncate("1d")
+        .alias("first_day_midnight")
+    )
+    df = df.with_columns(
+        (pl.col("first_day_midnight") + pl.duration(hours=9, minutes=30)).alias(
+            "ref_time"
+        )
+    )
+    df = df.with_columns(
+        ((pl.col("time") - pl.col("ref_time")) / pl.duration(days=1)).alias("wall_time")
+    )
+    df = df.drop(["first_day_midnight", "ref_time"])
+    return df
+
+
 def transform_state(df: pl.DataFrame) -> pl.DataFrame:
     """
     Transform state-related columns including clean area computation.
     """
     df = transform_area(df)
+    df = transform_wall_time(df)
     df = df.with_columns(
         pl.col("clean_area")
         .mean()
