@@ -11,6 +11,8 @@ class MockEnv(gym.Env):
     def __init__(
         self,
         df: pl.DataFrame,
+        stats: dict,
+        cols: list,
         include_action_traces: bool = True,
         use_continuous_actions: bool = False,
     ):
@@ -32,24 +34,23 @@ class MockEnv(gym.Env):
         self.completed_episodes = set()  # Track completed episodes
         self.include_action_traces = include_action_traces
         self.use_continuous_actions = use_continuous_actions
-        # Compute global min and max for clean_area normalization
-        clean_area_min = df["clean_area"].min()
-        clean_area_max = df["clean_area"].max()
-        print(f"Global clean_area min: {clean_area_min}, max: {clean_area_max}")
-        self.clean_area_min = (
-            float(clean_area_min) if clean_area_min is not None else 0.0
-        )  # type: ignore
-        self.clean_area_max = (
-            float(clean_area_max) if clean_area_max is not None else 1.0
-        )  # type: ignore
-        # Compute global min and max for day normalization
-        day_min = df["day"].min()
-        day_max = df["day"].max()
-        self.day_min = float(day_min) if day_min is not None else 0.0  # type: ignore
-        self.day_max = float(day_max) if day_max is not None else 1.0  # type: ignore
-        # Set observation space: DAY (normalized), AREA (normalized), ACTION TRACE 0.5 (3 values)
+        self.stats = stats
+        # Set observation space: PLANT STATS, ACTION TRACE, EMBEDDING
+        self.cols = cols
+        self.embedding_dim = 768
+
+        self.low = np.array(
+            [stats[col]["min"] for col in self.cols]
+            + [0.0] * 3
+            + [-1.0] * self.embedding_dim
+        )
+        self.high = np.array(
+            [stats[col]["max"] for col in self.cols]
+            + [1.0] * 3
+            + [1.0] * self. embedding_dim
+        )
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32
+            low=self.low, high=self.high, dtype=np.float32
         )
         if use_continuous_actions:
             # Action space: [red_coef, white_coef, blue_coef]
@@ -59,67 +60,26 @@ class MockEnv(gym.Env):
 
     def _get_observation(self) -> Any:
         # return a vector with the following values:
-        # DAY (normalized from 0 to 14)
-        # AREA (normalized)
+        # PLANT STATS
         # ACTION TRACE 0.5 (3 values)
+        # EMBEDDING
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
-            return np.zeros((5,), dtype=np.float32)
+            return np.zeros((len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32)
 
         row = self.plant_df.slice(self.current_row_index, 1)
         if row.is_empty():
-            return np.zeros((5,), dtype=np.float32)
+            return np.zeros((len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32)
 
-        # Get day and normalize
-        day = row["day"][0] if row["day"][0] is not None else 0.0
-        if self.day_max > self.day_min:
-            day_norm = (day - self.day_min) / (self.day_max - self.day_min)
-        else:
-            day_norm = 0.0
-
-        # Get area (clean_area) and normalize
-        area = row["clean_area"][0] if row["clean_area"][0] is not None else 0.0
-        if self.clean_area_max > self.clean_area_min:
-            area_norm = (area - self.clean_area_min) / (
-                self.clean_area_max - self.clean_area_min
-            )
-        else:
-            area_norm = 0.0
-
-        # Get action traces from the previous row
-        if self.use_continuous_actions:
-            action_trace = [0.0, 0.0, 0.0]
-            if self.current_row_index > 0:
-                prev_row = self.plant_df.slice(self.current_row_index - 1, 1)
-                if not prev_row.is_empty():
-                    action_trace = [
-                        prev_row["red_coef_trace_0.9"][0]
-                        if prev_row["red_coef_trace_0.9"][0] is not None
-                        else 0.0,
-                        prev_row["white_coef_trace_0.9"][0]
-                        if prev_row["white_coef_trace_0.9"][0] is not None
-                        else 0.0,
-                        prev_row["blue_coef_trace_0.9"][0]
-                        if prev_row["blue_coef_trace_0.9"][0] is not None
-                        else 0.0,
-                    ]
-        else:
-            action_trace = [0.0, 0.0, 0.0]
-            if self.current_row_index > 0:
-                prev_row = self.plant_df.slice(self.current_row_index - 1, 1)
-                if not prev_row.is_empty():
-                    action_trace = [
-                        prev_row["discrete_action_trace_0_0.9"][0]
-                        if prev_row["discrete_action_trace_0_0.9"][0] is not None
-                        else 0.0,
-                        prev_row["discrete_action_trace_1_0.9"][0]
-                        if prev_row["discrete_action_trace_1_0.9"][0] is not None
-                        else 0.0,
-                        prev_row["discrete_action_trace_2_0.9"][0]
-                        if prev_row["discrete_action_trace_2_0.9"][0] is not None
-                        else 0.0,
-                    ]
-
-        obs = np.array([day_norm, area_norm] + action_trace, dtype=np.float32)
+        # Get plant stats
+        plant_stats = row[self.cols].to_numpy().flatten()
+       
+        # Get action traces from the current row
+        action_trace = row[["red_coef_trace_0.9", "white_coef_trace_0.9", "blue_coef_trace_0.9"]].to_numpy().flatten()
+       
+        # Get embedding
+        cls_token = row[["cls_token"]].to_numpy().flatten()
+        
+        obs = np.concatenate([plant_stats, action_trace, cls_token], dtype=np.float32)
         return obs
 
     def _get_action(self) -> int | np.ndarray:
