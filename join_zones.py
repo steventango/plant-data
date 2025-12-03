@@ -9,8 +9,13 @@ from config import VERSION, tzinfo
 from transforms import (
     transform_action_traces,
     transform_outlier_detection,
+    transform_reward,
+    transform_state,
 )
-from transforms.normalization import compute_normalization_stats, save_normalization_stats
+from transforms.normalization import (
+    compute_normalization_stats,
+    save_normalization_stats,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -102,6 +107,10 @@ def main():
         "experiment", "zone", "plant_id", "time"
     ).collect(engine="streaming")
     
+    # TEMPORARY: transform state, after re-running process_zone.py, we can remove this.
+    df = transform_state(df)
+    df = transform_reward(df)
+
     # Apply outlier detection on full dataset before saving
     df = transform_outlier_detection(df, q1=0.01, q2=0.99)
 
