@@ -720,34 +720,64 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
 
     # Create new dataframe with embeddings
     logger.info(f"Creating new dataset with {len(all_results)} plant detections")
+    
+    # Define base schema for key columns
+    base_schema = {
+        "experiment": df.schema["experiment"],
+        "zone": df.schema["zone"],
+        "time": df.schema["time"],
+        "plant_id": pl.Int32,
+        "image_path": pl.String,
+        "cls_token": pl.Array(pl.Float32, 768),
+        "patch_features": pl.Array(pl.Float32, (196, 768)),
+    }
+    
+    # Infer schema for stats columns from first result that has stats
+    stats_schema = {}
+    for result in all_results:
+        stats_keys = [k for k in result.keys() if k not in base_schema]
+        if stats_keys:
+            for key in stats_keys:
+                value = result[key]
+                if isinstance(value, bool):
+                    stats_schema[key] = pl.Boolean
+                elif isinstance(value, int):
+                    stats_schema[key] = pl.Int64
+                elif isinstance(value, float):
+                    stats_schema[key] = pl.Float64
+                elif isinstance(value, str):
+                    stats_schema[key] = pl.String
+                else:
+                    # Default to Float64 for unknown numeric types
+                    stats_schema[key] = pl.Float64
+            break
+    
+    # Combine schemas
+    full_schema = {**base_schema, **stats_schema}
+    
     df_new = pl.DataFrame(
         all_results,
-        schema={
-            "experiment": df.schema["experiment"],
-            "zone": df.schema["zone"],
-            "time": df.schema["time"],
-            "plant_id": pl.Int32,
-            "image_path": pl.String,
-            "cls_token": pl.Array(pl.Float32, 768),
-            "patch_features": pl.Array(pl.Float32, (196, 768)),
-        },
+        schema=full_schema,
     )
 
-    # Get the original dataset columns we want to preserve (excluding plant_id, image_path, cls_token, patch_features which we're adding/reassigning)
-    # We'll join on (experiment, zone, time) and take the first match for shared columns
+    # Get the original dataset columns we want to preserve
+    # Exclude: join keys, columns we're adding/reassigning, and stats columns that are now per-plant
+    cols_to_exclude = {
+        "plant_id",
+        "cls_token",
+        "patch_features",
+        "image_path",
+        "experiment",
+        "zone",
+        "time",
+    }
+    # Also exclude any stats columns that are now in df_new (per-plant stats)
+    cols_to_exclude.update(stats_schema.keys())
+    
     original_cols_to_keep = [
         col
         for col in df.columns
-        if col
-        not in [
-            "plant_id",
-            "cls_token",
-            "patch_features",
-            "image_path",
-            "experiment",
-            "zone",
-            "time",
-        ]
+        if col not in cols_to_exclude
     ]
 
     # For each (experiment, zone, time), get one representative row from original dataset
@@ -762,7 +792,7 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
         how="left",
     )
 
-    # Reorder columns to put key columns first
+    # Reorder columns to put key columns first, then stats, then other metadata
     key_cols = [
         "experiment",
         "zone",
@@ -772,8 +802,10 @@ def transform_image_embeddings(df: pl.DataFrame) -> pl.DataFrame:
         "cls_token",
         "patch_features",
     ]
-    other_cols = [col for col in df_with_embeddings.columns if col not in key_cols]
-    df_with_embeddings = df_with_embeddings.select(key_cols + other_cols)
+    # Stats columns come after key columns
+    stats_cols = [col for col in stats_schema.keys() if col in df_with_embeddings.columns]
+    other_cols = [col for col in df_with_embeddings.columns if col not in key_cols and col not in stats_cols]
+    df_with_embeddings = df_with_embeddings.select(key_cols + stats_cols + other_cols)
 
     # Print statistics
     total_embeddings = df_new.filter(pl.col("cls_token").is_not_null()).height
