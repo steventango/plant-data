@@ -9,6 +9,7 @@ import seaborn as sns
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+VERSION = "v17"
 
 def main():
     parser = argparse.ArgumentParser(
@@ -17,7 +18,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default="/data/plant-rl/offline/cleaned_offline_dataset_daily_continuous_v15.parquet",
+        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
         help="Path to parquet file",
     )
     parser.add_argument(
@@ -28,24 +29,6 @@ def main():
     )
     parser.add_argument(
         "--show", action="store_true", help="Show the plots interactively"
-    )
-    parser.add_argument(
-        "--no-filter",
-        action="store_true",
-        help="Do not filter by good days and outliers (default: filter)",
-    )
-    # TODO: migrate to dataset generation
-    parser.add_argument(
-        "--lower-quantile",
-        type=float,
-        default=0.2,
-        help="Lower quantile for filtering returns (default: 0.0 - no filtering)",
-    )
-    parser.add_argument(
-        "--upper-quantile",
-        type=float,
-        default=0.8,
-        help="Upper quantile for filtering area (default: 1.0 - no filtering)",
     )
     args = parser.parse_args()
 
@@ -58,17 +41,7 @@ def main():
         sys.exit(1)
 
     # Check if required columns exist
-    required_cols = ["experiment", "zone", "plant_id", "reward", "day"]
-    # Use clean_area if area is not available
-    if "area" in df.columns:
-        area_col = "area"
-    elif "clean_area" in df.columns:
-        area_col = "clean_area"
-        required_cols.append("clean_area")
-    else:
-        logging.error("Neither 'area' nor 'clean_area' column found")
-        logging.info("Available columns: %s", df.columns)
-        sys.exit(1)
+    required_cols = ["experiment", "zone", "plant_id", "reward", "day", "clean_area"]
 
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
@@ -76,69 +49,10 @@ def main():
         logging.info("Available columns: %s", df.columns)
         sys.exit(1)
 
-    # Filter data
-    if not args.no_filter:
-        logging.info("Filtering data (day <= 13, is_good_day, not outlier)...")
-        filter_expr = pl.col("day") <= 13
-
-        if "is_good_day" in df.columns:
-            filter_expr = filter_expr & pl.col("is_good_day")
-        else:
-            logging.warning("'is_good_day' column not found, skipping this filter")
-
-        if "outlier" in df.columns:
-            filter_expr = filter_expr & ~pl.col("outlier")
-        else:
-            logging.warning("'outlier' column not found, skipping this filter")
-
-        df = df.filter(filter_expr)
-        logging.info(f"Rows after filtering: {df.shape[0]}")
-
-    # Filter data by area quantile if specified
-    if args.lower_quantile > 0.0 or args.upper_quantile < 1.0:
-        logging.info(
-            f"Filtering data to keep only {args.lower_quantile}-{args.upper_quantile} area quantile range per experiment/zone/day..."
-        )
-
-        # Sort to ensure correct shifting for next-step validation
-        df = df.sort(["experiment", "zone", "plant_id", "day"])
-
-        df = df.with_columns(
-            [
-                pl.col(area_col)
-                .quantile(args.lower_quantile)
-                .over(["experiment", "zone", "day"])
-                .alias("lower_q"),
-                pl.col(area_col)
-                .quantile(args.upper_quantile)
-                .over(["experiment", "zone", "day"])
-                .alias("upper_q"),
-            ]
-        )
-
-        original_count = df.shape[0]
-
-        # Mark rows as valid if they are within the quantile range
-        df = df.with_columns(
-            (
-                (pl.col(area_col) >= pl.col("lower_q"))
-                & (pl.col(area_col) <= pl.col("upper_q"))
-            ).alias("is_valid_area")
-        )
-
-        # Filter: keep row if it is valid AND the next row (for same plant) is valid
-        # This is because reward depends on next_area / area.
-        df = df.filter(
-            pl.col("is_valid_area")
-            & pl.col("is_valid_area")
-            .shift(-1)
-            .over(["experiment", "zone", "plant_id"])
-            .fill_null(True)
-        ).drop(["lower_q", "upper_q", "is_valid_area"])
-
-        logging.info(
-            f"Rows after area quantile filtering: {df.shape[0]} (removed {original_count - df.shape[0]})"
-        )
+    # Calculate returns over exp, zone, plant_id
+    df = df.with_columns(
+        pl.col("reward").sum().over(["experiment", "zone", "plant_id"]).alias("return")
+    )
 
     # Map experiment/zone to Agent
     df = df.with_columns(
@@ -173,6 +87,9 @@ def main():
     # Filter out "Other" agents if they exist, to keep the plot clean based on the request
     df = df.filter(~pl.col("agent").str.contains("Other"))
 
+    # filter by day < 14
+    df = df.filter(pl.col("day") < 14)
+
     logging.info(f"Number of plants (episodes): {df.shape[0]}")
 
     # Create output directory
@@ -189,19 +106,19 @@ def main():
     sns.barplot(
         data=pdf,
         x="agent",
-        y="reward",
+        y="return",
         errorbar=("ci", 95),
         capsize=0.1,
         palette="tab10",
     )
 
-    plt.title("Reward by Agent (95% CI)")
+    plt.title("Return by Agent (95% CI)")
     plt.xlabel("Agent")
-    plt.ylabel("Reward")
+    plt.ylabel("Return")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
 
-    out_file = out_dir / "rewards_by_zone_experiment.png"
+    out_file = out_dir / "returns_by_agent.png"
     plt.savefig(out_file, dpi=200)
     logging.info("Saved plot to %s", out_file)
 
