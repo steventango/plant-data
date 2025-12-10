@@ -91,7 +91,7 @@ def apply_tukey_outlier_detection(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     # Clean up temporary columns
-    df = df.drop(["_q1", "_q3", "_iqr", "_lower_fence", "_upper_fence"])
+    df = df.drop(["_q1", "_q3", "_iqr", "_upper_fence"])
 
     return df
 
