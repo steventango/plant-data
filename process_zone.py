@@ -61,29 +61,29 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = transform_drop_old_cols(df)
 
     df = df.with_columns(
+        ((pl.col("time").dt.date() - df["time"].dt.date().min()).dt.total_days()).alias(
+            "day"
+        ),
+    )
+
+    df = df.with_columns(
         pl.col("action.0").fill_null(strategy="forward").over("plant_id"),
         pl.col("action.1").fill_null(strategy="forward").over("plant_id"),
         pl.col("action.2").fill_null(strategy="forward").over("plant_id"),
         pl.col("action.3").fill_null(strategy="forward").over("plant_id"),
         pl.col("action.4").fill_null(strategy="forward").over("plant_id"),
         pl.col("action.5").fill_null(strategy="forward").over("plant_id"),
-        pl.col("clean_area").fill_null(strategy="forward").over("plant_id"),
     )
-    df = df.with_columns(
-        ((pl.col("time").dt.date() - df["time"].dt.date().min()).dt.total_days()).alias(
-            "day"
-        ),
-    )
+    df = transform_action(df)
     df = df.filter(
         (pl.col("time").dt.time() >= time(9, 30, tzinfo=tzinfo))
         & (pl.col("time").dt.time() < time(20, 30, tzinfo=tzinfo))
     )
-    df = transform_action(df)
     # transform action by averaging over the day between 9:30 and 20:30
     df = df.with_columns(
-        pl.col("red_coef").mean().over("experiment", "zone").alias("red_coef"),
-        pl.col("white_coef").mean().over("experiment", "zone").alias("white_coef"),
-        pl.col("blue_coef").mean().over("experiment", "zone").alias("blue_coef"),
+        pl.col("red_coef").mean().over("experiment", "zone", "day").alias("red_coef"),
+        pl.col("white_coef").mean().over("experiment", "zone", "day").alias("white_coef"),
+        pl.col("blue_coef").mean().over("experiment", "zone", "day").alias("blue_coef"),
     )
     # daily subsampling
     df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
