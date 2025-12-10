@@ -1,28 +1,37 @@
 import polars as pl
 
-df = pl.read_parquet(
-    "/data/plant-rl/online/E13/P1/Dirichlet1/alliance-zone01/processed/v16/E13_Z1.parquet"
+df = pl.scan_parquet(
+    "/data/plant-rl/online/E13/P1/Dirichlet1/alliance-zone01/processed/v17/E13_Z1.parquet"
 )
 pl.Config.set_tbl_rows(1000)
 pl.Config.set_tbl_cols(20)
 
 cols = [
     "area",
-    "convex_hull_area",
-    "solidity",
-    "perimeter",
-    "width",
-    "height",
-    "longest_path",
-    "center_of_mass_x",
-    "center_of_mass_y",
-    "convex_hull_vertices",
-    "ellipse_center_x",
-    "ellipse_center_y",
-    "ellipse_major_axis",
-    "ellipse_minor_axis",
-    "ellipse_angle",
-    "ellipse_eccentricity",
+    "clean_area",
 ]
 
 print(df.select(cols).describe())
+
+
+df = df.with_columns(
+    (("/data/plant-rl/online/E13/P1/Dirichlet1/alliance-zone01/processed/v17/" + pl.col("image_path")).str.replace(".jpg", "_segment.jpg", literal=True)).alias("image_path")
+)
+
+for i in range(18):
+    filtered_df =  df.filter(
+        (pl.col("experiment") == 13) & (pl.col("zone") == 1) & (pl.col("plant_id") == i)
+    ).select([
+        "plant_id",
+        "time",
+        "wall_time",
+        "area",
+        "uema_area",
+        "clean_area",
+        "reward",
+        "image_path"
+    ]).collect(engine="streaming")
+    if filtered_df["clean_area"].len() > 3 and filtered_df["clean_area"][3] > 10:
+        continue
+    print(filtered_df)
+    print("\n".join(filtered_df["image_path"].to_list()))
