@@ -9,6 +9,7 @@ import seaborn as sns
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+VERSION = "v17"
 
 def main():
     parser = argparse.ArgumentParser(
@@ -17,7 +18,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default="/data/plant-rl/offline/cleaned_offline_dataset_daily_continuous_v16.parquet",
+        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
         help="Path to parquet file",
     )
     parser.add_argument(
@@ -111,14 +112,6 @@ def main():
         .group_by("plant_id")
         .first()  # Takes the first row for each group (which corresponds to earliest time due to sort)
         .select(["plant_id", area_col])
-    )
-
-    # if initial area > 100, replace with 0
-    initial_areas = initial_areas.with_columns(
-        pl.when(pl.col(area_col) > 100)
-        .then(0)
-        .otherwise(pl.col(area_col))
-        .alias(area_col)
     )
 
     logging.info(f"Found {initial_areas.shape[0]} unique plants.")
