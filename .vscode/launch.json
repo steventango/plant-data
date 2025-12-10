@@ -13,8 +13,15 @@
             "console": "integratedTerminal",
             "args": [
                 "--data-path",
-                "/data/plant-rl/online/E14/P1/Constant1/alliance-zone01/"
+                "/data/plant-rl/online/E12/P1/DiscreteRandom1/alliance-zone01/"
             ]
+        },
+        {
+            "name": "Python Debugger: create_minari_dataset.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "create_minari_dataset.py",
+            "console": "integratedTerminal",
         }
     ]
 }
