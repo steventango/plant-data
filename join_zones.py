@@ -101,15 +101,13 @@ def main():
     for file in files:
         print(file)
         lf = pl.scan_parquet(file)
+        # TODO: check utility of patch_features
+        lf = lf.drop("patch_features")
         lazy_frames.append(lf)
     
     df = pl.concat(lazy_frames, how="diagonal_relaxed").sort(
         "experiment", "zone", "plant_id", "time"
     ).collect(engine="streaming")
-    
-    # TEMPORARY: transform state, after re-running process_zone.py, we can remove this.
-    df = transform_state(df)
-    df = transform_reward(df)
 
     # Apply outlier detection on full dataset before saving
     df = transform_outlier_detection(df, q1=0.01, q2=0.99)
