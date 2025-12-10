@@ -10,7 +10,7 @@ import seaborn as sns
 import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-VERSION = "v16"
+VERSION = "v17"
 
 def main():
     parser = argparse.ArgumentParser(
@@ -32,11 +32,6 @@ def main():
         "--show", action="store_true", help="Show the plots interactively"
     )
     parser.add_argument(
-        "--no-filter",
-        action="store_true",
-        help="Do not filter by good days and outliers (default: filter)",
-    )
-    parser.add_argument(
         "--mean-per-zone",
         action="store_true",
         help="Plot mean plant area per zone (all experiments on one plot)",
@@ -45,19 +40,6 @@ def main():
         "--group-by-agent",
         action="store_true",
         help="Group by agent instead of experiment-zone (only for --mean-per-zone)",
-    )
-    # TODO: migrate to dataset generation
-    parser.add_argument(
-        "--lower-quantile",
-        type=float,
-        default=0.2,
-        help="Lower quantile for filtering (default: 0.2)",
-    )
-    parser.add_argument(
-        "--upper-quantile",
-        type=float,
-        default=0.8,
-        help="Upper quantile for filtering (default: 0.8)",
     )
     parser.add_argument(
         "--normalize",
@@ -80,14 +62,10 @@ def main():
 
     # Check if required columns exist
     required_cols = ["experiment", "zone", "time", "plant_id"]
-    # Use clean_area if area is not available
-    if "area" in df.columns:
-        area_col = "area"
-    elif "clean_area" in df.columns:
-        area_col = "clean_area"
-        required_cols.append("clean_area")
-    else:
-        logging.error("Neither 'area' nor 'clean_area' column found")
+    area_col = "clean_area"
+    required_cols.append(area_col)
+    if area_col not in df.columns:
+        logging.error(f"'{area_col}' column not found")
         logging.info("Available columns: %s", df.columns)
         sys.exit(1)
     missing_cols = [col for col in required_cols if col not in df.columns]
@@ -95,54 +73,6 @@ def main():
         logging.error("Missing required columns: %s", missing_cols)
         logging.info("Available columns: %s", df.columns)
         sys.exit(1)
-
-    # TODO: migrate to dataset generation
-    # Calculate wall_time
-    # Reference time: 9:30 AM on the first day of each experiment/zone
-    logging.info("Calculating wall_time...")
-    df = df.with_columns(
-        pl.col("time")
-        .min()
-        .over(["experiment", "zone"])
-        .dt.truncate("1d")
-        .alias("first_day_midnight")
-    )
-    df = df.with_columns(
-        (pl.col("first_day_midnight") + pl.duration(hours=9, minutes=30)).alias(
-            "ref_time"
-        )
-    )
-    df = df.with_columns(
-        ((pl.col("time") - pl.col("ref_time")) / pl.duration(days=1)).alias("wall_time")
-    )
-    df = df.drop(["first_day_midnight", "ref_time"])
-
-    # Filter data
-    if not args.no_filter:
-        logging.info("Filtering data (day <= 13, is_good_day, not outlier)...")
-        # Hard filter for day range
-        df = df.filter(pl.col("day") <= 13)
-
-        # Soft filter (set to null) for quality flags to break lines
-        if "is_good_day" in df.columns:
-            df = df.with_columns(
-                pl.when(pl.col("is_good_day"))
-                .then(pl.col(area_col))
-                .otherwise(None)
-                .alias(area_col)
-            )
-        else:
-            logging.warning("'is_good_day' column not found, skipping this filter")
-
-        if "outlier" in df.columns:
-            df = df.with_columns(
-                pl.when(~pl.col("outlier"))
-                .then(pl.col(area_col))
-                .otherwise(None)
-                .alias(area_col)
-            )
-        else:
-            logging.warning("'outlier' column not found, skipping this filter")
 
     # Sort data
     logging.info("Sorting data...")
@@ -167,34 +97,6 @@ def main():
         logging.info(
             f"Filtered {original_count - filtered_count} rows due to truncation"
         )
-
-    # Filter data to keep only points within specified quantiles for each timestep
-    logging.info(
-        f"Filtering data to keep only {args.lower_quantile}-{args.upper_quantile} quantile range per experiment/zone/wall_time..."
-    )
-    df = df.with_columns(
-        [
-            pl.col(area_col)
-            .quantile(args.lower_quantile)
-            .over([pl.col("wall_time").round(4)])
-            .alias("lower_q"),
-            pl.col(area_col)
-            .quantile(args.upper_quantile)
-            .over([pl.col("wall_time").round(4)])
-            .alias("upper_q"),
-        ]
-    )
-
-    # Soft filter for quantiles
-    df = df.with_columns(
-        pl.when(
-            (pl.col(area_col) >= pl.col("lower_q"))
-            & (pl.col(area_col) <= pl.col("upper_q"))
-        )
-        .then(pl.col(area_col))
-        .otherwise(None)
-        .alias(area_col)
-    ).drop(["lower_q", "upper_q"])
 
     # Normalize area if requested
     if args.normalize:
@@ -421,8 +323,8 @@ def main():
                 color = colors[i % len(colors)]
 
                 for pid, pdata in zone_data.groupby("plant_id"):
-                    # Check for large time gaps (e.g. > 1.5 hours) to break lines
-                    gap_threshold = 1.5 / 24
+                    # Check for large time gaps (e.g. > 1 day) to break lines
+                    gap_threshold = 1
                     times = pdata["wall_time"].values
 
                     # Find indices where the gap to the *next* point is large
