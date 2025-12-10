@@ -3,13 +3,13 @@ import polars as pl
 
 # Configuration for clean area calculation
 # Tukey outlier detection (across plants per timestep)
-TUKEY_K = 1.5  # Conservative k factor for Tukey fences
+TUKEY_K_UPPER = 1.5  # Conservative k factor for Tukey fence
 
 # EWM outlier detection (within each plant over time)
 CLEAN_AREA_LOWER_THRESHOLD = 0.5  # Reject if area < (1 - threshold) * ewm_mean
-CLEAN_AREA_UPPER_THRESHOLD = 1  # Reject if area > (1 + threshold) * ewm_mean
+CLEAN_AREA_UPPER_THRESHOLD = 1.5  # Reject if area > (1 + threshold) * ewm_mean
 MINIMUM_AREA_COUNT = 1  # Minimum observations before applying outlier detection
-EWM_SPAN = 10  # Span for exponential weighted mean (higher = smoother)
+EWM_BETA = 0.1  # Decay factor for EWM (higher = smoother); alpha = 1 - beta
 
 # Morphology features that should be replaced together with area when outlier detected
 MORPHOLOGY_FEATURES = [
@@ -66,18 +66,14 @@ def apply_tukey_outlier_detection(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.with_columns(
         [
-            (pl.col("_q1") - TUKEY_K * pl.col("_iqr")).alias("_lower_fence"),
-            (pl.col("_q3") + TUKEY_K * pl.col("_iqr")).alias("_upper_fence"),
+            (pl.col("_q3") + TUKEY_K_UPPER * pl.col("_iqr")).alias("_upper_fence"),
         ]
     )
 
     # Flag outliers and set their area to 0 (will be treated as invalid)
     df = df.with_columns(
         [
-            pl.when(
-                (pl.col("area") < pl.col("_lower_fence"))
-                | (pl.col("area") > pl.col("_upper_fence"))
-            )
+            pl.when(pl.col("area") > pl.col("_upper_fence"))
             .then(pl.lit(True))
             .otherwise(pl.lit(False))
             .alias("tukey_outlier"),
@@ -140,16 +136,16 @@ def compute_clean_features_for_plant(plant_df: pl.DataFrame) -> pl.DataFrame:
     ewm_values = []
     is_outlier_list = []
 
-    # EWM parameters
-    alpha = 2.0 / (EWM_SPAN + 1)  # Standard EWM alpha calculation
+    # EWM parameters: alpha = 1 - beta (beta=0.9 means alpha=0.1)
+    alpha = 1.0 - EWM_BETA
 
     # State variables for EWM calculation (with adjust=True behavior)
     ewm_sum = 0.0
     ewm_weight = 0.0
 
     # Previous clean values for all features
-    prev_clean_values: dict[str, float | None] = {f: None for f in available_features}
-    prev_clean_area = None
+    prev_clean_values: dict[str, float | None] = {f: 0.0 for f in available_features}
+    prev_clean_area = 0.0
     area_count = 0
 
     for i in range(n):
@@ -227,12 +223,7 @@ def compute_clean_features_for_group(group_df: pl.DataFrame) -> pl.DataFrame:
     Compute clean morphology features for all plants in an (experiment, zone) group.
     
     Processes each plant_id independently to maintain separate EWM states.
-    """
-    # Check if plant_id column exists
-    if "plant_id" not in group_df.columns:
-        # No plant_id column, treat entire group as single plant
-        return compute_clean_features_for_plant(group_df)
-    
+    """    
     # Process each plant independently
     result_frames = []
     for plant_id, plant_group in group_df.group_by("plant_id", maintain_order=True):
