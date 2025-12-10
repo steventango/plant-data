@@ -70,7 +70,9 @@ def find_image_path(experiment: int, zone: int, image_name: str) -> Optional[Pat
     return None
 
 
-def detect_pots_reference(image_path: Path, zone_key: tuple, output_dir: Optional[Path] = None) -> Optional[dict]:
+def detect_pots_reference(
+    image_path: Path, zone_key: tuple, output_dir: Optional[Path] = None
+) -> Optional[dict]:
     """Detect pots in a reference image to get quadrilaterals.
 
     Args:
@@ -87,7 +89,11 @@ def detect_pots_reference(image_path: Path, zone_key: tuple, output_dir: Optiona
         image_data = encode_image(image)
 
         # Determine visualization directory
-        viz_dir = (output_dir / "visualizations") if output_dir else (OFFLINE_DIR / "visualizations")
+        viz_dir = (
+            (output_dir / "visualizations")
+            if output_dir
+            else (OFFLINE_DIR / "visualizations")
+        )
 
         # 1. Detect pots
         detect_response = get_session().post(
@@ -241,45 +247,16 @@ def generate_embedding(image_data: str) -> Optional[list]:
 
 def detect_plant(
     warped_image_b64: str,
-    zone_key: tuple = None,
-    plant_id: int = None,
-    timestamp_str: str = None,
-    output_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """Detect plant in a warped pot image."""
     try:
         response = get_session().post(
             f"{PIPELINE_URL}/plant/detect",
-            json={"image_data": warped_image_b64, "visualize": True},
+            json={"image_data": warped_image_b64},
             timeout=30,
         )
         response.raise_for_status()
-        result = response.json()
-
-        # Save detect visualization if available
-        if (
-            zone_key
-            and plant_id is not None
-            and timestamp_str
-            and "visualization" in result
-            and result["visualization"]
-        ):
-            try:
-                # Save to images/{plant_id}/{timestamp}_detect.jpg
-                if output_dir:
-                    plant_dir = output_dir / "images" / str(plant_id)
-                else:
-                    experiment, zone = zone_key
-                    plant_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images" / str(plant_id)
-                plant_dir.mkdir(parents=True, exist_ok=True)
-                viz_image = decode_image(result["visualization"])
-                viz_path = plant_dir / f"{timestamp_str}_detect.jpg"
-                viz_image.save(viz_path)
-                logger.debug(f"Saved plant detect visualization to {viz_path}")
-            except Exception as e:
-                logger.warning(f"Failed to save plant detect visualization: {e}")
-
-        return result
+        return response.json()
     except Exception as e:
         logger.error(f"Plant detection failed: {e}")
         return None
@@ -289,10 +266,6 @@ def segment_plant(
     warped_image_b64: str,
     boxes: list,
     confidences: list,
-    zone_key: tuple = None,
-    plant_id: int = None,
-    timestamp_str: str = None,
-    output_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """Segment plant given detection boxes."""
     try:
@@ -302,37 +275,11 @@ def segment_plant(
                 "image_data": warped_image_b64,
                 "boxes": boxes,
                 "confidences": confidences,
-                "visualize": True,
             },
             timeout=30,
         )
         response.raise_for_status()
-        result = response.json()
-
-        # Save segment visualization if available
-        if (
-            zone_key
-            and plant_id is not None
-            and timestamp_str
-            and "visualization" in result
-            and result["visualization"]
-        ):
-            try:
-                # Save to images/{plant_id}/{timestamp}_segment.jpg
-                if output_dir:
-                    plant_dir = output_dir / "images" / str(plant_id)
-                else:
-                    experiment, zone = zone_key
-                    plant_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images" / str(plant_id)
-                plant_dir.mkdir(parents=True, exist_ok=True)
-                viz_image = decode_image(result["visualization"])
-                viz_path = plant_dir / f"{timestamp_str}_segment.jpg"
-                viz_image.save(viz_path)
-                logger.debug(f"Saved plant segment visualization to {viz_path}")
-            except Exception as e:
-                logger.warning(f"Failed to save plant segment visualization: {e}")
-
-        return result
+        return response.json()
     except Exception as e:
         logger.error(f"Plant segmentation failed: {e}")
         return None
@@ -341,10 +288,6 @@ def segment_plant(
 def compute_plant_stats(
     warped_image_b64: str,
     mask_b64: str,
-    zone_key: tuple = None,
-    plant_id: int = None,
-    timestamp_str: str = None,
-    output_dir: Optional[Path] = None,
 ) -> Optional[dict]:
     """Compute plant statistics given mask."""
     try:
@@ -355,43 +298,79 @@ def compute_plant_stats(
                 "mask": mask_b64,
                 "pot_size_mm": 60.0,
                 "margin": 0.25,
-                "visualize": True,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Plant stats failed: {e}")
+        return None
+
+
+def visualize_plant_pipeline(
+    warped_image_b64: str,
+    boxes: list,
+    confidences: list,
+    masks: list,
+    zone_key: tuple,
+    plant_id: int,
+    timestamp_str: str,
+    mask_scores: Optional[list] = None,
+    combined_scores: Optional[list] = None,
+    selected_index: Optional[int] = None,
+    output_dir: Optional[Path] = None,
+) -> None:
+    """Visualize the plant pipeline results."""
+    try:
+        response = get_session().post(
+            f"{PIPELINE_URL}/plant/visualize",
+            json={
+                "image_data": warped_image_b64,
+                "boxes": boxes,
+                "confidences": confidences,
+                "masks": masks,
+                "mask_scores": mask_scores,
+                "combined_scores": combined_scores,
+                "selected_index": selected_index,
+                "stats": True,
             },
             timeout=30,
         )
         response.raise_for_status()
         result = response.json()
 
-        # Save stats visualization if available
-        if (
-            zone_key
-            and plant_id is not None
-            and timestamp_str
-            and "visualization" in result
-            and result["visualization"]
-        ):
+        if "visualization" in result:
             try:
-                # Save to images/{plant_id}/{timestamp}_stats.jpg
+                # Save to images/{plant_id}/{timestamp}_viz.jpg
                 if output_dir:
                     plant_dir = output_dir / "images" / str(plant_id)
                 else:
                     experiment, zone = zone_key
-                    plant_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images" / str(plant_id)
+                    plant_dir = (
+                        OFFLINE_DIR
+                        / "processed"
+                        / f"E{experiment}"
+                        / f"Z{zone:02d}"
+                        / "images"
+                        / str(plant_id)
+                    )
+
                 plant_dir.mkdir(parents=True, exist_ok=True)
                 viz_image = decode_image(result["visualization"])
-                viz_path = plant_dir / f"{timestamp_str}_stats.jpg"
+                viz_path = plant_dir / f"{timestamp_str}_viz.jpg"
                 viz_image.save(viz_path)
-                logger.debug(f"Saved plant stats visualization to {viz_path}")
+                logger.debug(f"Saved plant visualization to {viz_path}")
             except Exception as e:
-                logger.warning(f"Failed to save plant stats visualization: {e}")
+                logger.warning(f"Failed to save plant visualization: {e}")
 
-        return result
     except Exception as e:
-        logger.error(f"Plant stats failed: {e}")
-        return None
+        logger.error(f"Plant visualization failed: {e}")
 
 
-def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional[Path] = None) -> list:
+def process_zone_images(
+    zone_key: tuple, zone_images: list, output_dir: Optional[Path] = None
+) -> list:
     """Process all images for a single zone using block-based execution.
 
     Args:
@@ -429,7 +408,9 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
 
     # Detect pots in reference image
     t0 = time.time()
-    detection_result = detect_pots_reference(reference_image["image_path"], zone_key, output_dir)
+    detection_result = detect_pots_reference(
+        reference_image["image_path"], zone_key, output_dir
+    )
     logger.info(
         f"E{experiment}/zone{zone}: Reference detection took {time.time() - t0:.2f}s"
     )
@@ -448,7 +429,9 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
     if output_dir:
         images_base_dir = output_dir / "images"
     else:
-        images_base_dir = OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
+        images_base_dir = (
+            OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
+        )
     images_base_dir.mkdir(parents=True, exist_ok=True)
 
     # --- BLOCK 1: WARP ALL IMAGES ---
@@ -521,13 +504,7 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
     t0_detect = time.time()
 
     def detect_task(pot):
-        result = detect_plant(
-            pot["warped_b64"],
-            zone_key=zone_key,
-            plant_id=pot["plant_id"],
-            timestamp_str=pot["timestamp_str"],
-            output_dir=output_dir,
-        )
+        result = detect_plant(pot["warped_b64"])
         if result:
             pot["boxes"] = result.get("boxes", [])
             pot["confidences"] = result.get("confidences", [])
@@ -555,18 +532,19 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
     t0_segment = time.time()
 
     def segment_task(pot):
+        pot["all_masks"] = []
+        pot["mask_scores"] = []
+        pot["combined_scores"] = []
+        pot["selected_index"] = None
+
         if pot["boxes"]:
-            result = segment_plant(
-                pot["warped_b64"],
-                pot["boxes"],
-                pot["confidences"],
-                zone_key=zone_key,
-                plant_id=pot["plant_id"],
-                timestamp_str=pot["timestamp_str"],
-                output_dir=output_dir,
-            )
+            result = segment_plant(pot["warped_b64"], pot["boxes"], pot["confidences"])
             if result and result.get("success"):
                 pot["mask_b64"] = result.get("mask")
+                pot["all_masks"] = result.get("masks", [])
+                pot["mask_scores"] = result.get("mask_scores", [])
+                pot["combined_scores"] = result.get("combined_scores", [])
+                pot["selected_index"] = result.get("selected_index")
             else:
                 pot["mask_b64"] = None
         else:
@@ -593,16 +571,25 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
 
     def stats_task(pot):
         if pot["mask_b64"]:
-            result = compute_plant_stats(
-                pot["warped_b64"],
-                pot["mask_b64"],
-                zone_key=zone_key,
-                plant_id=pot["plant_id"],
-                timestamp_str=pot["timestamp_str"],
-                output_dir=output_dir,
-            )
+            result = compute_plant_stats(pot["warped_b64"], pot["mask_b64"])
             if result:
                 pot["stats"] = result.get("stats")
+
+                # Visualize
+                visualize_plant_pipeline(
+                    pot["warped_b64"],
+                    pot["boxes"],
+                    pot["confidences"],
+                    pot.get("all_masks") or [pot["mask_b64"]],
+                    zone_key=zone_key,
+                    plant_id=pot["plant_id"],
+                    timestamp_str=pot["timestamp_str"],
+                    mask_scores=pot.get("mask_scores"),
+                    combined_scores=pot.get("combined_scores"),
+                    selected_index=pot.get("selected_index"),
+                    output_dir=output_dir,
+                )
+
             else:
                 pot["stats"] = None
         else:
@@ -632,7 +619,7 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
             # Save to images/{plant_id}/{timestamp}.jpg
             plant_dir = images_base_dir / str(pot["plant_id"])
             plant_dir.mkdir(parents=True, exist_ok=True)
-            
+
             warped_image = decode_image(pot["warped_b64"])
             image_filename = f"{pot['timestamp_str']}.jpg"
             image_file_path = plant_dir / image_filename
@@ -679,7 +666,9 @@ def process_zone_images(zone_key: tuple, zone_images: list, output_dir: Optional
     return results
 
 
-def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = None) -> pl.DataFrame:
+def transform_image_embeddings(
+    df: pl.DataFrame, output_dir: Optional[Path] = None
+) -> pl.DataFrame:
     """Transform to add image embeddings to a daily dataset.
 
     This function:
@@ -746,7 +735,7 @@ def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = No
 
     # Create new dataframe with embeddings
     logger.info(f"Creating new dataset with {len(all_results)} plant detections")
-    
+
     # Define base schema for key columns
     base_schema = {
         "experiment": df.schema["experiment"],
@@ -757,7 +746,7 @@ def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = No
         "cls_token": pl.Array(pl.Float32, 768),
         "patch_features": pl.Array(pl.Float32, (196, 768)),
     }
-    
+
     # Infer schema for stats columns from first result that has stats
     stats_schema = {}
     for result in all_results:
@@ -777,10 +766,10 @@ def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = No
                     # Default to Float64 for unknown numeric types
                     stats_schema[key] = pl.Float64
             break
-    
+
     # Combine schemas
     full_schema = {**base_schema, **stats_schema}
-    
+
     df_new = pl.DataFrame(
         all_results,
         schema=full_schema,
@@ -799,12 +788,8 @@ def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = No
     }
     # Also exclude any stats columns that are now in df_new (per-plant stats)
     cols_to_exclude.update(stats_schema.keys())
-    
-    original_cols_to_keep = [
-        col
-        for col in df.columns
-        if col not in cols_to_exclude
-    ]
+
+    original_cols_to_keep = [col for col in df.columns if col not in cols_to_exclude]
 
     # For each (experiment, zone, time), get one representative row from original dataset
     df_metadata = df.select(
@@ -829,8 +814,14 @@ def transform_image_embeddings(df: pl.DataFrame, output_dir: Optional[Path] = No
         "patch_features",
     ]
     # Stats columns come after key columns
-    stats_cols = [col for col in stats_schema.keys() if col in df_with_embeddings.columns]
-    other_cols = [col for col in df_with_embeddings.columns if col not in key_cols and col not in stats_cols]
+    stats_cols = [
+        col for col in stats_schema.keys() if col in df_with_embeddings.columns
+    ]
+    other_cols = [
+        col
+        for col in df_with_embeddings.columns
+        if col not in key_cols and col not in stats_cols
+    ]
     df_with_embeddings = df_with_embeddings.select(key_cols + stats_cols + other_cols)
 
     # Print statistics
