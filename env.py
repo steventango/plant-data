@@ -33,20 +33,19 @@ class MockEnv(gym.Env):
         self.completed_episodes = set()  # Track completed episodes
         self.include_action_traces = include_action_traces
         self.stats = stats
-        # Set observation space: PLANT STATS, ACTION TRACE, EMBEDDING
         self.cols = cols
         self.embedding_dim = 768
 
         self.low = np.array(
             [stats[col]["min"] for col in self.cols]
             + [0.0] * 3
-            + [-1.0] * self.embedding_dim
-        )
+            + [-np.inf] * self.embedding_dim
+        ).astype(np.float32)
         self.high = np.array(
             [stats[col]["max"] for col in self.cols]
             + [1.0] * 3
-            + [1.0] * self. embedding_dim
-        )
+            + [np.inf] * self.embedding_dim
+        ).astype(np.float32)
         self.observation_space = spaces.Box(
             low=self.low, high=self.high, dtype=np.float32
         )
@@ -54,10 +53,6 @@ class MockEnv(gym.Env):
         self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
 
     def _get_observation(self) -> Any:
-        # return a vector with the following values:
-        # PLANT STATS
-        # ACTION TRACE 0.5 (3 values)
-        # EMBEDDING
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
             return np.zeros((len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32)
 
@@ -65,16 +60,18 @@ class MockEnv(gym.Env):
         if row.is_empty():
             return np.zeros((len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32)
 
-        # Get plant stats
-        plant_stats = row[self.cols].to_numpy().flatten()
+        # Get stats
+        stats = row[self.cols].to_numpy().flatten()
        
         # Get action traces from the current row
         action_trace = row[["red_coef_trace_0.9", "white_coef_trace_0.9", "blue_coef_trace_0.9"]].to_numpy().flatten()
+
+        action_trace = np.nan_to_num(action_trace, nan=0.0)
        
         # Get embedding
-        cls_token = row[["cls_token"]].to_numpy().flatten()
-        
-        obs = np.concatenate([plant_stats, action_trace, cls_token], dtype=np.float32)
+        cls_token = row[["cls_token"]].to_numpy().flatten()[0]
+
+        obs = np.concatenate([stats, action_trace, cls_token], dtype=np.float32)
         return obs
 
     def _get_action(self) -> int | np.ndarray:
