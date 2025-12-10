@@ -7,29 +7,24 @@ import polars as pl
 
 logger = logging.getLogger(__name__)
 
-# Feature columns that should be normalized using min-max scaling
-# These are the numeric columns that represent plant features and measurements
 FEATURE_COLUMNS = [
-    # Plant morphology stats
-    "area",
-    "convex_hull_area",
-    "solidity",
-    "perimeter",
-    "width",
-    "height",
-    "longest_path",
-    "center_of_mass_x",
-    "center_of_mass_y",
-    "convex_hull_vertices",
-    "ellipse_center_x",
-    "ellipse_center_y",
-    "ellipse_major_axis",
-    "ellipse_minor_axis",
-    "ellipse_angle",
-    "ellipse_eccentricity",
-    # Area measurements
+    "wall_time",
     "clean_area",
-    "mean_clean_area",
+    "clean_convex_hull_area",
+    "clean_solidity",
+    "clean_perimeter",
+    "clean_width",
+    "clean_height",
+    "clean_longest_path",
+    "clean_center_of_mass_x",
+    "clean_center_of_mass_y",
+    "clean_convex_hull_vertices",
+    "clean_ellipse_center_x",
+    "clean_ellipse_center_y",
+    "clean_ellipse_major_axis",
+    "clean_ellipse_minor_axis",
+    "clean_ellipse_angle",
+    "clean_ellipse_eccentricity",
 ]
 
 
