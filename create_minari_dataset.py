@@ -36,7 +36,7 @@ def main():
     # TODO: consider keeping some of the weird days
     df = df.filter((pl.col("day") <= 13) & pl.col("is_good_day") & ~pl.col("outlier"))
 
-    stats = load_normalization_stats(input_dir)
+    stats = load_normalization_stats(input_dir / f"normalization-stats-{VERSION}.json")
 
     cols = [
         "clean_area",
