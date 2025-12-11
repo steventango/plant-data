@@ -3,7 +3,7 @@ import polars as pl
 
 # Configuration for clean area calculation
 # Tukey outlier detection (across plants per timestep)
-TUKEY_K_UPPER = 1.5  # Conservative k factor for Tukey fence
+TUKEY_K_UPPER = 4.0  # Conservative k factor for Tukey fence
 
 # EWM outlier detection (within each plant over time)
 CLEAN_AREA_LOWER_THRESHOLD = 0.5  # Reject if area < (1 - threshold) * ewm_mean
@@ -156,7 +156,6 @@ def compute_clean_features_for_plant(plant_df: pl.DataFrame) -> pl.DataFrame:
             # Use previous clean values for all features
             for f in available_features:
                 clean_features[f].append(prev_clean_values[f])
-            clean_features["clean_area"].append(prev_clean_area)
             ewm_values.append(ewm_sum / ewm_weight if ewm_weight > 0 else None)
             is_outlier_list.append(True)  # Treat as outlier
             continue
@@ -182,7 +181,6 @@ def compute_clean_features_for_plant(plant_df: pl.DataFrame) -> pl.DataFrame:
             # Use previous clean values for ALL features
             for f in available_features:
                 clean_features[f].append(prev_clean_values[f])
-            clean_features["clean_area"].append(prev_clean_area)
         else:
             # Accept current values as clean for ALL features
             for f in available_features:
@@ -190,8 +188,6 @@ def compute_clean_features_for_plant(plant_df: pl.DataFrame) -> pl.DataFrame:
                 clean_features[f].append(current_val)
                 prev_clean_values[f] = current_val
 
-            # Special handling for clean_area (may come from area_after_tukey)
-            clean_features["clean_area"].append(area)
             prev_clean_area = area
 
             # Update EWM with this valid observation
@@ -201,17 +197,15 @@ def compute_clean_features_for_plant(plant_df: pl.DataFrame) -> pl.DataFrame:
 
     # Build columns to add
     new_columns = [
-        pl.Series("clean_area", clean_features["clean_area"]).cast(pl.Float64),
         pl.Series("uema_area", ewm_values).cast(pl.Float64),
         pl.Series("is_outlier", is_outlier_list),
     ]
 
     # Add clean versions of all morphology features (prefixed with "clean_")
     for f in available_features:
-        if f != "area":  # clean_area already added
-            new_columns.append(
-                pl.Series(f"clean_{f}", clean_features[f]).cast(pl.Float64)
-            )
+        new_columns.append(
+            pl.Series(f"clean_{f}", clean_features[f]).cast(pl.Float64)
+        )
 
     result = plant_df.with_columns(new_columns)
 
