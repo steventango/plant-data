@@ -14,6 +14,11 @@ def transform_outlier_detection(
     Returns:
         DataFrame with added "valid" column indicating non-outlier rows
     """
+    # if reward is nan / inf, mark as invalid
+    df = df.with_columns(
+        (pl.col("reward").is_nan() | pl.col("reward").is_infinite()).alias("outlier")
+    )
+    invalid_count = df["outlier"].sum()
     ql = df["reward"].quantile(q1)
     qu = df["reward"].quantile(q2)
     df = df.with_columns(
