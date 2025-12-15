@@ -107,9 +107,11 @@ def main():
         lf = lf.drop("patch_features")
 
         # Make image_path absolute and point to segment images
+        prefix = str(file.parent)
+        # TODO: image paths need to be stored under image version key
+        prefix = prefix.replace("v19", "v18")
         lf = lf.with_columns(
-            (str(file.parent) + "/" + pl.col("image_path"))
-            .str.replace(".jpg", "_segment.jpg", literal=True)
+            (prefix + "/" + pl.col("image_path"))
             .alias("image_path")
         )
 
