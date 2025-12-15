@@ -18,15 +18,16 @@ from transforms import (
 
 logging.basicConfig(level=logging.INFO)
 
+
 def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     logging.info(f"Processing Experiment {exp_id}, Zone {zone_id} from {data_path}")
-    
+
     # Check if raw.csv exists in the data_path
     raw_csv_path = Path(data_path) / "raw.csv"
     if not raw_csv_path.exists():
         logging.error(f"raw.csv not found in {data_path}")
         return None
-        
+
     df = pl.read_csv(raw_csv_path, try_parse_dates=True)
     df = df.with_columns(pl.col("time").dt.convert_time_zone(TIMEZONE))
     df = df.with_columns(
@@ -82,12 +83,15 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     # transform action by averaging over the day between 9:30 and 20:30
     df = df.with_columns(
         pl.col("red_coef").mean().over("experiment", "zone", "day").alias("red_coef"),
-        pl.col("white_coef").mean().over("experiment", "zone", "day").alias("white_coef"),
+        pl.col("white_coef")
+        .mean()
+        .over("experiment", "zone", "day")
+        .alias("white_coef"),
         pl.col("blue_coef").mean().over("experiment", "zone", "day").alias("blue_coef"),
     )
     # daily subsampling
     df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
-    
+
     df = transform_action_traces(df)
 
     # Pass output directory for image embeddings (same directory as parquet output)
@@ -108,32 +112,41 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         (pl.col("time") == df["time"].max()).alias("truncated"),
     )
     print(f"E{exp_id}/zone{zone_id}: day min {df['day'].min()}, max {df['day'].max()}")
-    
+
     # Save intermediate result
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(output_path)
     logging.info(f"Saved intermediate file to {output_path}")
     return df
 
+
 def infer_experiment_zone(path_str):
     # Regex to extract E{exp_id} and zone{zone_id} or alliance-zone{zone_id}
     # Example path: /data/plant-rl/online/E14/P1/Constant1/alliance-zone01/
-    
+
     exp_match = re.search(r"E(\d+)", path_str)
     zone_match = re.search(r"zone(\d+)", path_str)
-    
+
     if exp_match and zone_match:
         return int(exp_match.group(1)), int(zone_match.group(1))
     return None, None
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Process plant data for a specific zone.")
-    parser.add_argument("--data-path", type=str, required=True, help="Path to the directory containing raw.csv")
+    parser = argparse.ArgumentParser(
+        description="Process plant data for a specific zone."
+    )
+    parser.add_argument(
+        "--data-path",
+        type=str,
+        required=True,
+        help="Path to the directory containing raw.csv",
+    )
     args = parser.parse_args()
 
     data_path = args.data_path.rstrip("/")
     exp_id, zone_id = infer_experiment_zone(data_path)
-    
+
     if exp_id is None or zone_id is None:
         logging.error(f"Could not infer experiment and zone ID from path: {data_path}")
         return
@@ -147,16 +160,19 @@ def main():
         if k in GOOD_ZONE_DAYS:
             good_days = GOOD_ZONE_DAYS[k]
             break
-    
+
     if good_days is None:
-        logging.warning(f"Experiment {exp_id} Zone {zone_id} not found in GOOD_ZONE_DAYS. Using empty good_days list.")
+        logging.warning(
+            f"Experiment {exp_id} Zone {zone_id} not found in GOOD_ZONE_DAYS. Using empty good_days list."
+        )
         good_days = []
 
     # Construct output path
     output_dir = Path(data_path) / "processed" / VERSION
     output_path = output_dir / f"E{exp_id}_Z{zone_id}.parquet"
-    
+
     process_zone(data_path, str(output_path), exp_id, zone_id, good_days)
+
 
 if __name__ == "__main__":
     main()
