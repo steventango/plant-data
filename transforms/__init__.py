@@ -5,7 +5,6 @@ from .labels import import_labels
 from .normalization import (
     compute_normalization_stats,
     load_normalization_stats,
-    normalize_dataframe,
     save_normalization_stats,
 )
 from .outliers import transform_outlier_detection
@@ -21,7 +20,6 @@ __all__ = [
     "import_labels",
     "compute_normalization_stats",
     "load_normalization_stats",
-    "normalize_dataframe",
     "save_normalization_stats",
     "transform_outlier_detection",
     "transform_reward",
