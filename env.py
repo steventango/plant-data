@@ -34,6 +34,7 @@ class MockEnv(gym.Env):
         self.include_action_traces = include_action_traces
         self.stats = stats
         self.cols = cols
+        self.done = False
         self.embedding_dim = 768
 
         self.low = np.array(
@@ -91,7 +92,7 @@ class MockEnv(gym.Env):
 
     def is_done(self) -> bool:
         """Check if all episodes have been completed"""
-        return len(self.completed_episodes) >= len(self.episode_keys)
+        return len(self.completed_episodes) >= len(self.episode_keys) or self.done
 
     def reset(
         self,
@@ -122,11 +123,20 @@ class MockEnv(gym.Env):
                 candidate_key = self.episode_keys[self.current_episode_index]
                 self.current_episode_index += 1
 
+                # ensure rows > 1:
+                if self.df.filter(
+                    (pl.col("experiment") == candidate_key[0])
+                    & (pl.col("zone") == candidate_key[1])
+                    & (pl.col("plant_id") == candidate_key[2])
+                ).height < 2:
+                    continue
+
                 if candidate_key not in self.completed_episodes:
                     self.current_episode_key = candidate_key
                     break
             else:
                 # All episodes completed, return None to indicate done
+                self.done = True
                 return None, {"done": True}
 
             # Get all rows for this episode
@@ -142,7 +152,7 @@ class MockEnv(gym.Env):
         return obs, info
 
     def step(self, action: int | np.ndarray) -> Tuple[Any, float, bool, bool, dict]:
-        # Get current row for reward and terminal flag
+        self.current_row_index += 1
         row = self.plant_df.slice(self.current_row_index, 1)
 
         reward = float(row["reward"][0]) if row["reward"][0] is not None else 0.0
@@ -151,19 +161,17 @@ class MockEnv(gym.Env):
             bool(row["truncated"][0]) if row["truncated"][0] is not None else False
         )
 
-        # Move to next row
-        self.current_row_index += 1
-
         # Check if we've reached the end of this plant's data
-        if self.current_row_index >= self.plant_df.height:
-            terminal = True
+        end_of_df = self.current_row_index == self.plant_df.height - 1
+        if end_of_df and not terminal:
+            truncated = True
 
         # If truncated, save state to continue from this point in next reset
-        if truncated and not terminal:
+        if truncated and not terminal and not end_of_df:
             self.was_truncated = True
             self.truncated_episode_key = self.current_episode_key
             self.truncated_row_index = self.current_row_index
-        elif terminal and not truncated:
+        elif terminal or end_of_df:
             # Episode completed naturally, mark it as done
             if self.current_episode_key is not None:
                 self.completed_episodes.add(self.current_episode_key)
