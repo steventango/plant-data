@@ -9,8 +9,8 @@ from config import VERSION, tzinfo
 from transforms import (
     transform_action_traces,
     transform_outlier_detection,
-    transform_reward,
-    transform_state,
+    # transform_reward,
+    # transform_state,
 )
 from transforms.normalization import (
     compute_normalization_stats,
@@ -94,7 +94,9 @@ def main():
         logging.error(f"No processed files found in {root_dir}")
         return
 
-    logging.info(f"Found {len(files)} processed files. Concatenating with lazy loading...")
+    logging.info(
+        f"Found {len(files)} processed files. Concatenating with lazy loading..."
+    )
 
     # Use lazy loading to reduce memory usage during concatenation
     lazy_frames = []
@@ -104,10 +106,12 @@ def main():
         # TODO: check utility of patch_features
         lf = lf.drop("patch_features")
         lazy_frames.append(lf)
-    
-    df = pl.concat(lazy_frames, how="diagonal_relaxed").sort(
-        "experiment", "zone", "plant_id", "time"
-    ).collect(engine="streaming")
+
+    df = (
+        pl.concat(lazy_frames, how="diagonal_relaxed")
+        .sort("experiment", "zone", "plant_id", "time")
+        .collect(engine="streaming")
+    )
 
     # Apply outlier detection on full dataset before saving
     df = transform_outlier_detection(df, q1=0.01, q2=0.99)
@@ -144,7 +148,6 @@ def main():
     # daily_stats = compute_normalization_stats(df_daily)
     # daily_stats_path = output_dir / f"normalization-stats-daily-{VERSION}.json"
     # save_normalization_stats(daily_stats, daily_stats_path)
-
 
 
 if __name__ == "__main__":
