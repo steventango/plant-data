@@ -105,6 +105,14 @@ def main():
         lf = pl.scan_parquet(file)
         # TODO: check utility of patch_features
         lf = lf.drop("patch_features")
+
+        # Make image_path absolute and point to segment images
+        lf = lf.with_columns(
+            (str(file.parent) + "/" + pl.col("image_path"))
+            .str.replace(".jpg", "_segment.jpg", literal=True)
+            .alias("image_path")
+        )
+
         lazy_frames.append(lf)
 
     df = (

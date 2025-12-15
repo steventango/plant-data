@@ -55,20 +55,28 @@ class MockEnv(gym.Env):
 
     def _get_observation(self) -> Any:
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
-            return np.zeros((len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32)
+            return np.zeros(
+                (len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32
+            )
 
         row = self.plant_df.slice(self.current_row_index, 1)
         if row.is_empty():
-            return np.zeros((len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32)
+            return np.zeros(
+                (len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32
+            )
 
         # Get stats
         stats = row[self.cols].to_numpy().flatten()
-       
+
         # Get action traces from the current row
-        action_trace = row[["red_coef_trace_0.9", "white_coef_trace_0.9", "blue_coef_trace_0.9"]].to_numpy().flatten()
+        action_trace = (
+            row[["red_coef_trace_0.9", "white_coef_trace_0.9", "blue_coef_trace_0.9"]]
+            .to_numpy()
+            .flatten()
+        )
 
         action_trace = np.nan_to_num(action_trace, nan=0.0)
-       
+
         # Get embedding
         cls_token = row[["cls_token"]].to_numpy().flatten()[0]
 
@@ -84,11 +92,26 @@ class MockEnv(gym.Env):
             return np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
         red_coef = row["red_coef"][0] if row["red_coef"][0] is not None else 0.0
-        white_coef = (
-            row["white_coef"][0] if row["white_coef"][0] is not None else 0.0
-        )
+        white_coef = row["white_coef"][0] if row["white_coef"][0] is not None else 0.0
         blue_coef = row["blue_coef"][0] if row["blue_coef"][0] is not None else 0.0
         return np.array([red_coef, white_coef, blue_coef], dtype=np.float32)
+
+    def _get_info(self) -> dict[str, Any]:
+        info = {"action": self._get_action()}
+
+        if self.plant_df is None or self.current_row_index >= self.plant_df.height:
+            return info
+
+        row = self.plant_df.slice(self.current_row_index, 1)
+        if row.is_empty():
+            return info
+
+        if "image_path" in row.columns:
+            image_path = row["image_path"][0]
+            if image_path is not None:
+                info["image_path"] = image_path
+
+        return info
 
     def is_done(self) -> bool:
         """Check if all episodes have been completed"""
@@ -124,11 +147,14 @@ class MockEnv(gym.Env):
                 self.current_episode_index += 1
 
                 # ensure rows > 1:
-                if self.df.filter(
-                    (pl.col("experiment") == candidate_key[0])
-                    & (pl.col("zone") == candidate_key[1])
-                    & (pl.col("plant_id") == candidate_key[2])
-                ).height < 2:
+                if (
+                    self.df.filter(
+                        (pl.col("experiment") == candidate_key[0])
+                        & (pl.col("zone") == candidate_key[1])
+                        & (pl.col("plant_id") == candidate_key[2])
+                    ).height
+                    < 2
+                ):
                     continue
 
                 if candidate_key not in self.completed_episodes:
@@ -148,7 +174,7 @@ class MockEnv(gym.Env):
             self.current_row_index = 0
 
         obs = self._get_observation()
-        info = {"action": self._get_action()}
+        info = self._get_info()
         return obs, info
 
     def step(self, action: int | np.ndarray) -> Tuple[Any, float, bool, bool, dict]:
@@ -177,6 +203,6 @@ class MockEnv(gym.Env):
                 self.completed_episodes.add(self.current_episode_key)
 
         obs = self._get_observation()
-        info = {"action": self._get_action()}
+        info = self._get_info()
 
         return obs, reward, terminal, truncated, info
