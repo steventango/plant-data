@@ -65,7 +65,6 @@ def transform_terminal(df: pl.DataFrame) -> pl.DataFrame:
     df = transform_bolted(df)
     df = df.with_columns(
         ((pl.col("bolted_pred") > 0.5) | (pl.col("day") == 13))
-        .cast(pl.Int32)
         .alias("terminal")
     )
     return df
