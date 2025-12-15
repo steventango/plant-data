@@ -103,6 +103,14 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = transform_reward(df)
 
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))
+    pl.Config.set_tbl_rows(20)
+    print(
+        df.filter(
+            pl.col("plant_id") == 0
+        ).select(
+            "time", "clean_area", "red_coef", "white_coef", "blue_coef", "reward", "terminal"
+        )
+    )
     print(
         df.select(
             "time", "mean_clean_area", "red_coef", "white_coef", "blue_coef", "reward"
