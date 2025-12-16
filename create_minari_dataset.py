@@ -39,6 +39,7 @@ def main():
     stats = load_normalization_stats(input_dir / f"normalization-stats-{VERSION}.json")
 
     cols = [
+        "wall_time",
         "clean_area",
         "clean_convex_hull_area",
         "clean_solidity",
