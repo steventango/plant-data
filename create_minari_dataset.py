@@ -70,7 +70,7 @@ def main():
     while not mock_env.is_done():
         obs, info = env.reset(seed=0)
 
-        while True:
+        while not mock_env.done:
             action = info["action"]
             obs, rew, terminated, truncated, info = env.step(action)
 
