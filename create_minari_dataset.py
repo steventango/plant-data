@@ -55,6 +55,9 @@ def main():
         "clean_ellipse_minor_axis",
         "clean_ellipse_angle",
         "clean_ellipse_eccentricity",
+        "red_coef_trace_0.9",
+        "white_coef_trace_0.9",
+        "blue_coef_trace_0.9",
     ]
 
     # Create continuous action dataset

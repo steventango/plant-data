@@ -68,19 +68,10 @@ class MockEnv(gym.Env):
         # Get stats
         stats = row[self.cols].to_numpy().flatten()
 
-        # Get action traces from the current row
-        action_trace = (
-            row[["red_coef_trace_0.9", "white_coef_trace_0.9", "blue_coef_trace_0.9"]]
-            .to_numpy()
-            .flatten()
-        )
-
-        action_trace = np.nan_to_num(action_trace, nan=0.0)
-
         # Get embedding
         cls_token = row[["cls_token"]].to_numpy().flatten()[0]
 
-        obs = np.concatenate([stats, action_trace, cls_token], dtype=np.float32)
+        obs = np.concatenate([stats, cls_token], dtype=np.float32)
         return obs
 
     def _get_action(self) -> int | np.ndarray:
