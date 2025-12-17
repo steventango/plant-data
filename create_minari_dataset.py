@@ -1,11 +1,12 @@
-import logging
 import argparse
+import logging
 from pathlib import Path
 
 import polars as pl
-from env import MockEnv
 from minari import DataCollector
+
 from config import VERSION
+from env import MockEnv
 from transforms.normalization import load_normalization_stats
 
 logging.basicConfig(level=logging.INFO)
@@ -32,10 +33,6 @@ def main():
         logging.error(f"File not found: {input_path}. Please run join_zones.py first.")
         return
 
-    # Filter for RL
-    # TODO: consider keeping some of the weird days
-    df = df.filter((pl.col("day") <= 13) & pl.col("is_good_day") & ~pl.col("outlier"))
-
     stats = load_normalization_stats(input_dir / f"normalization-stats-{VERSION}.json")
 
     cols = [
@@ -61,35 +58,46 @@ def main():
         "blue_coef_trace_0.9",
     ]
 
-    # Create continuous action dataset
-    mock_env = MockEnv(df, stats, cols)
-    env = DataCollector(mock_env, record_infos=True)
-
-    # Run episodes until environment indicates all data has been processed
-    logging.info("Generating Minari dataset...")
-    while not mock_env.is_done():
-        obs, info = env.reset(seed=0)
-
-        while not mock_env.done:
-            action = info["action"]
-            obs, rew, terminated, truncated, info = env.step(action)
-
-            if terminated or truncated:
-                break
-
-    dataset = env.create_dataset(
-        dataset_id=f"plant-data/mixed-{VERSION}",
-        algorithm_name="None",
-        code_permalink="https://github.com/steventango/plant-data",
-        author="Steven Tang",
-        author_email="stang5@ualberta.ca",
+    df = df.filter(~pl.col("outlier"))
+    df_filtered = df.filter(pl.col("day") < 14)
+    df = df.with_columns(
+        (
+            (pl.col("bolted_pred") > 0.5)
+            | (
+                pl.col("day")
+                == pl.col("day").max().over("experiment", "zone", "plant_id")
+            )
+        ).alias("terminal")
     )
 
-    print(f"Continuous action dataset created: {dataset.id}")
-    print("Dataset statistics:")
-    print(f"  Total episodes: {len(list(dataset.iterate_episodes()))}")
-    print(f"  Observation space: {mock_env.observation_space}")
-    print(f"  Action space: {mock_env.action_space}")
+    def create_dataset(df: pl.DataFrame, name: str):
+        mock_env = MockEnv(df, stats, cols)
+        env = DataCollector(mock_env, record_infos=True)
+
+        # Run episodes until environment indicates all data has been processed
+        logging.info("Generating Minari dataset...")
+        while not mock_env.is_done():
+            obs, info = env.reset(seed=0)
+
+            while not mock_env.done:
+                action = info["action"]
+                obs, rew, terminated, truncated, info = env.step(action)
+
+                if terminated or truncated:
+                    break
+
+        dataset = env.create_dataset(
+            dataset_id=f"plant-data/{name}-{VERSION}",
+            algorithm_name="None",
+            code_permalink="https://github.com/steventango/plant-data",
+            author="Steven Tang",
+            author_email="stang5@ualberta.ca",
+        )
+
+        print(f"Dataset created: {dataset.id}")
+
+    create_dataset(df_filtered, "mixed")
+    create_dataset(df, "mixed-all")
 
 
 if __name__ == "__main__":
