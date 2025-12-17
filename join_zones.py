@@ -109,7 +109,7 @@ def main():
         # Make image_path absolute and point to segment images
         prefix = str(file.parent)
         # TODO: image paths need to be stored under image version key
-        prefix = prefix.replace("v19", "v18")
+        prefix = prefix.replace("v20", "v18")
         lf = lf.with_columns(
             (prefix + "/" + pl.col("image_path"))
             .alias("image_path")
@@ -126,7 +126,30 @@ def main():
     # Apply outlier detection on full dataset before saving
     df = transform_outlier_detection(df, q1=0.01, q2=0.99)
 
-    print(df.head())
+    df = df.with_columns(
+        pl.col("time")
+        .shift(-1)
+        .over("experiment", "zone", "plant_id")
+        .alias("next_time"),
+    )
+    df = df.with_columns(
+        (
+            pl.col("next_time").is_not_null()
+            & (pl.col("next_time") != pl.col("time") + pl.duration(days=1))
+        ).alias("truncated")
+    )
+    df = df.drop("next_time")
+
+    pl.Config.set_tbl_rows(20)
+    print(df.filter((pl.col("experiment") == 11) & (pl.col("zone") == 1) & (pl.col("plant_id") == 0)).select(
+        "wall_time",
+        "time",
+        "clean_area",
+        "reward",
+        "nodata",
+        "outlier",
+        "valid"
+    ))
 
     # Save to parquet
     output_dir.mkdir(parents=True, exist_ok=True)
