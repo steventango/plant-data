@@ -117,7 +117,7 @@ class MockEnv(gym.Env):
         # If we were truncated, continue from where we left off
         if self.was_truncated and self.truncated_episode_key is not None:
             self.current_episode_key = self.truncated_episode_key
-            self.current_row_index = self.truncated_row_index
+            self.current_row_index = self.truncated_row_index + 1
             self.was_truncated = False
             self.truncated_episode_key = None
             self.truncated_row_index = 0
