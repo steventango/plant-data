@@ -100,6 +100,10 @@ class MockEnv(gym.Env):
             if image_path is not None:
                 info["image_path"] = image_path
 
+        info["experiment"] = self.current_episode_key[0]
+        info["zone"] = self.current_episode_key[1]
+        info["plant_id"] = self.current_episode_key[2]
+
         return info
 
     def is_done(self) -> bool:
