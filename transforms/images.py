@@ -2,24 +2,25 @@ import base64
 import glob
 import io
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
-import threading
 
 import polars as pl
 import requests
 from PIL import Image
 from tqdm import tqdm
 
+from config import VISION_VERSION
+from transforms.cache import DiskCache
 
 PIPELINE_URL = "http://localhost:8800"
 EMBEDDINGS_URL = "http://localhost:8803"
 DATA_DIR = Path("/data/plant-rl")
 OFFLINE_DIR = DATA_DIR / "offline"
 ONLINE_DIR = DATA_DIR / "online"
-
 
 logger = logging.getLogger(__name__)
 
@@ -369,35 +370,82 @@ def visualize_plant_pipeline(
 
 
 def process_zone_images(
-    zone_key: tuple, zone_images: list, output_dir: Optional[Path] = None
-) -> list:
+    zone_df_subset: pl.DataFrame, output_dir: Optional[Path] = None
+) -> pl.DataFrame:
     """Process all images for a single zone using block-based execution.
 
     Args:
-        zone_key: Tuple of (experiment, zone)
-        zone_images: List of dicts with 'time' and 'image_path' keys (sorted by time)
+        zone_df_subset: DataFrame containing (experiment, zone, time, image_name) for one zone.
         output_dir: Optional output directory for processed images and visualizations
 
     Returns:
-        List of result dictionaries for all detected plants across all images
+        Polars DataFrame of result dictionaries for all detected plants across all images
     """
-    experiment, zone = zone_key
-    results = []
+    if zone_df_subset.is_empty():
+        return pl.DataFrame()
 
-    if not zone_images:
-        return results
+    # Get experiment and zone from first row (assuming all rows are same zone)
+    first_row = zone_df_subset.row(0, named=True)
+    experiment = first_row["experiment"]
+    zone = first_row["zone"]
+    zone_key = (experiment, zone)
 
-    # Find the first 9:30 AM image as reference (daylight image)
+    # Load cache first
+    cache = DiskCache(OFFLINE_DIR, VISION_VERSION)
+    cache_df = cache.load(experiment, zone)
+
+    # Identify images to process
+    images_info = []
+    for row in zone_df_subset.select("time", "image_name").iter_rows(named=True):
+        path = find_image_path(experiment, zone, row["image_name"])
+        if path:
+            images_info.append(
+                {
+                    "experiment": experiment,
+                    "zone": zone,
+                    "time": row["time"],
+                    "image_path": path,
+                }
+            )
+
+    if not images_info:
+        return pl.DataFrame()
+
+    images_info_df = pl.DataFrame(images_info)
+
+    # Filter out cached images
+    if cache_df is not None and not cache_df.is_empty():
+        # Anti-join on time
+        todo_df = images_info_df.join(cache_df.select("time"), on="time", how="anti")
+        images_to_process = todo_df.to_dicts()
+        logger.info(
+            f"E{experiment}/zone{zone}: {len(cache_df)} images cached, {len(images_to_process)} to process"
+        )
+    else:
+        images_to_process = images_info
+        # Define empty cache df with expected schema for union later
+        # We'll just rely on new_results_df schema if cache is empty
+        logger.info(
+            f"E{experiment}/zone{zone}: No cache found, processing {len(images_to_process)} images"
+        )
+
+    # If nothing to process, return cache
+    if not images_to_process:
+        if cache_df is not None:
+            return cache_df
+        else:
+            return pl.DataFrame()
+
+    # Find reference image (9:30 AM)
     reference_image = None
-
-    for img_info in zone_images:
+    for img_info in images_info:  # Search in ALL images
         timestamp = img_info["time"]
         if timestamp.hour == 9 and timestamp.minute == 30:
             reference_image = img_info
             break
 
     if reference_image is None:
-        reference_image = zone_images[0]
+        reference_image = images_info[0]
         logger.warning(
             f"E{experiment}/zone{zone}: No 9:30 AM image found, using first image"
         )
@@ -414,256 +462,245 @@ def process_zone_images(
     logger.info(
         f"E{experiment}/zone{zone}: Reference detection took {time.time() - t0:.2f}s"
     )
-    if detection_result is None:
-        logger.warning(
-            f"E{experiment}/zone{zone}: Failed to detect pots in reference image"
-        )
-        return results
 
-    quadrilaterals = detection_result.get("quadrilaterals", [])
-    if not quadrilaterals:
-        logger.warning(f"E{experiment}/zone{zone}: No pots detected in reference image")
-        return results
+    pots = []
+    if detection_result and detection_result.get("quadrilaterals"):
+        quadrilaterals = detection_result["quadrilaterals"]
 
-    # Base directory for processed images (will create plant subdirectories)
-    if output_dir:
-        images_base_dir = output_dir / "images"
-    else:
-        images_base_dir = (
-            OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
-        )
-    images_base_dir.mkdir(parents=True, exist_ok=True)
-
-    # --- BLOCK 1: WARP ALL IMAGES ---
-    logger.info(f"E{experiment}/zone{zone}: Starting WARP block")
-    t0_warp = time.time()
-    pots = []  # List of dicts representing each pot
-
-    def warp_task(img_info):
-        timestamp = img_info["time"]
-        image_path = img_info["image_path"]
-        timestamp_str = timestamp.strftime("%Y-%m-%dT%H%M%S")
-        warped_images = warp_with_quadrilaterals(image_path, quadrilaterals)
-        if warped_images:
-            return [
-                {
-                    "experiment": experiment,
-                    "zone": zone,
-                    "time": timestamp,
-                    "plant_id": i,
-                    "warped_b64": b64,
-                    "timestamp_str": timestamp_str,
-                }
-                for i, b64 in enumerate(warped_images)
-            ]
-        return []
-
-    with ThreadPoolExecutor(max_workers=256) as executor:
-        futures = [executor.submit(warp_task, img) for img in zone_images]
-        for future in tqdm(
-            as_completed(futures),
-            total=len(futures),
-            desc=f"E{experiment}/Z{zone} Warping",
-            leave=False,
-        ):
-            pots.extend(future.result())
-
-    logger.info(
-        f"E{experiment}/zone{zone}: Warped {len(pots)} pots in {time.time() - t0_warp:.2f}s"
-    )
-
-    if not pots:
-        return []
-
-    # --- BLOCK 2: EMBED ALL POTS ---
-    logger.info(f"E{experiment}/zone{zone}: Starting EMBED block")
-    t0_embed = time.time()
-
-    def embed_task(pot):
-        pot["cls_token"], pot["patch_features"] = generate_embedding(pot["warped_b64"])
-        return pot
-
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        # Update pots in place (or create new list)
-        # We use map to keep order if needed, but list(executor.map) is fine
-        pots = list(
-            tqdm(
-                executor.map(embed_task, pots),
-                total=len(pots),
-                desc=f"E{experiment}/Z{zone} Embedding",
-                leave=False,
-            )
-        )
-
-    logger.info(
-        f"E{experiment}/zone{zone}: Embedded {len(pots)} pots in {time.time() - t0_embed:.2f}s"
-    )
-
-    # --- BLOCK 3: DETECT ALL PLANTS ---
-    logger.info(f"E{experiment}/zone{zone}: Starting DETECT block")
-    t0_detect = time.time()
-
-    def detect_task(pot):
-        result = detect_plant(pot["warped_b64"])
-        if result:
-            pot["boxes"] = result.get("boxes", [])
-            pot["confidences"] = result.get("confidences", [])
+        if output_dir:
+            images_base_dir = output_dir / "images"
         else:
-            pot["boxes"] = []
-            pot["confidences"] = []
-        return pot
-
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        pots = list(
-            tqdm(
-                executor.map(detect_task, pots),
-                total=len(pots),
-                desc=f"E{experiment}/Z{zone} Detecting",
-                leave=False,
+            images_base_dir = (
+                OFFLINE_DIR / "processed" / f"E{experiment}" / f"Z{zone:02d}" / "images"
             )
+        images_base_dir.mkdir(parents=True, exist_ok=True)
+
+        # --- BLOCK 1: WARP ---
+        logger.info(f"E{experiment}/zone{zone}: Starting WARP block")
+        t0_warp = time.time()
+
+        def warp_task(img_info):
+            timestamp = img_info["time"]
+            result_list = []
+            warped_images = warp_with_quadrilaterals(
+                img_info["image_path"], quadrilaterals
+            )
+            if warped_images:
+                timestamp_str = timestamp.strftime("%Y-%m-%dT%H%M%S")
+                for i, b64 in enumerate(warped_images):
+                    result_list.append(
+                        {
+                            "experiment": experiment,
+                            "zone": zone,
+                            "time": timestamp,
+                            "plant_id": i,
+                            "warped_b64": b64,
+                            "timestamp_str": timestamp_str,
+                        }
+                    )
+            return result_list
+
+        with ThreadPoolExecutor(max_workers=256) as executor:
+            futures = [executor.submit(warp_task, img) for img in images_to_process]
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc=f"E{experiment}/Z{zone} Warping",
+                leave=False,
+            ):
+                pots.extend(future.result())
+
+        logger.info(
+            f"E{experiment}/zone{zone}: Warped {len(pots)} pots in {time.time() - t0_warp:.2f}s"
         )
 
-    logger.info(
-        f"E{experiment}/zone{zone}: Detected plants in {time.time() - t0_detect:.2f}s"
-    )
+        if pots:
+            # --- BLOCK 2: EMBED ---
+            logger.info(f"E{experiment}/zone{zone}: Starting EMBED block")
+            t0_embed = time.time()
 
-    # --- BLOCK 4: SEGMENT ALL PLANTS ---
-    logger.info(f"E{experiment}/zone{zone}: Starting SEGMENT block")
-    t0_segment = time.time()
-
-    def segment_task(pot):
-        pot["all_masks"] = []
-        pot["mask_scores"] = []
-        pot["combined_scores"] = []
-        pot["selected_index"] = None
-
-        if pot["boxes"]:
-            result = segment_plant(pot["warped_b64"], pot["boxes"], pot["confidences"])
-            if result and result.get("success"):
-                pot["mask_b64"] = result.get("mask")
-                pot["all_masks"] = result.get("masks", [])
-                pot["mask_scores"] = result.get("mask_scores", [])
-                pot["combined_scores"] = result.get("combined_scores", [])
-                pot["selected_index"] = result.get("selected_index")
-            else:
-                pot["mask_b64"] = None
-        else:
-            pot["mask_b64"] = None
-        return pot
-
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        pots = list(
-            tqdm(
-                executor.map(segment_task, pots),
-                total=len(pots),
-                desc=f"E{experiment}/Z{zone} Segmenting",
-                leave=False,
-            )
-        )
-
-    logger.info(
-        f"E{experiment}/zone{zone}: Segmented plants in {time.time() - t0_segment:.2f}s"
-    )
-
-    # --- BLOCK 5: STATS ALL PLANTS ---
-    logger.info(f"E{experiment}/zone{zone}: Starting STATS block")
-    t0_stats = time.time()
-
-    def stats_task(pot):
-        if pot["mask_b64"]:
-            result = compute_plant_stats(pot["warped_b64"], pot["mask_b64"])
-            if result:
-                pot["stats"] = result.get("stats")
-
-                # Visualize
-                visualize_plant_pipeline(
-                    pot["warped_b64"],
-                    pot["boxes"],
-                    pot["confidences"],
-                    pot.get("all_masks") or [pot["mask_b64"]],
-                    zone_key=zone_key,
-                    plant_id=pot["plant_id"],
-                    timestamp_str=pot["timestamp_str"],
-                    mask_scores=pot.get("mask_scores"),
-                    combined_scores=pot.get("combined_scores"),
-                    selected_index=pot.get("selected_index"),
-                    output_dir=output_dir,
+            def embed_task(pot):
+                pot["cls_token"], pot["patch_features"] = generate_embedding(
+                    pot["warped_b64"]
                 )
+                return pot
 
-            else:
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                pots = list(
+                    tqdm(
+                        executor.map(embed_task, pots),
+                        total=len(pots),
+                        desc=f"E{experiment}/Z{zone} Embedding",
+                        leave=False,
+                    )
+                )
+            logger.info(
+                f"E{experiment}/zone{zone}: Embedded {len(pots)} pots in {time.time() - t0_embed:.2f}s"
+            )
+
+            # --- BLOCK 3: DETECT ---
+            logger.info(f"E{experiment}/zone{zone}: Starting DETECT block")
+            t0_detect = time.time()
+
+            def detect_task(pot):
+                res = detect_plant(pot["warped_b64"])
+                pot["boxes"] = res.get("boxes", []) if res else []
+                pot["confidences"] = res.get("confidences", []) if res else []
+                return pot
+
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                pots = list(
+                    tqdm(
+                        executor.map(detect_task, pots),
+                        total=len(pots),
+                        desc=f"E{experiment}/Z{zone} Detecting",
+                        leave=False,
+                    )
+                )
+            logger.info(
+                f"E{experiment}/zone{zone}: Detected plants in {time.time() - t0_detect:.2f}s"
+            )
+
+            # --- BLOCK 4: SEGMENT ---
+            logger.info(f"E{experiment}/zone{zone}: Starting SEGMENT block")
+            t0_segment = time.time()
+
+            def segment_task(pot):
+                res = (
+                    segment_plant(pot["warped_b64"], pot["boxes"], pot["confidences"])
+                    if pot["boxes"]
+                    else None
+                )
+                success = res and res.get("success")
+                pot["mask_b64"] = res.get("mask") if success else None
+                pot["all_masks"] = res.get("masks", []) if success else []
+                # Keep other scores if needed...
+                pot["mask_scores"] = res.get("mask_scores", []) if success else []
+                pot["combined_scores"] = (
+                    res.get("combined_scores", []) if success else []
+                )
+                pot["selected_index"] = res.get("selected_index") if success else None
+                return pot
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                pots = list(
+                    tqdm(
+                        executor.map(segment_task, pots),
+                        total=len(pots),
+                        desc=f"E{experiment}/Z{zone} Segmenting",
+                        leave=False,
+                    )
+                )
+            logger.info(
+                f"E{experiment}/zone{zone}: Segmented plants in {time.time() - t0_segment:.2f}s"
+            )
+
+            # --- BLOCK 5: STATS ---
+            logger.info(f"E{experiment}/zone{zone}: Starting STATS block")
+            t0_stats = time.time()
+
+            def stats_task(pot):
                 pot["stats"] = None
+                if pot["mask_b64"]:
+                    res = compute_plant_stats(pot["warped_b64"], pot["mask_b64"])
+                    if res:
+                        pot["stats"] = res.get("stats")
+                        visualize_plant_pipeline(
+                            pot["warped_b64"],
+                            pot["boxes"],
+                            pot["confidences"],
+                            pot.get("all_masks") or [pot["mask_b64"]],
+                            zone_key,
+                            pot["plant_id"],
+                            pot["timestamp_str"],
+                            mask_scores=pot.get("mask_scores"),
+                            combined_scores=pot.get("combined_scores"),
+                            selected_index=pot.get("selected_index"),
+                            output_dir=output_dir,
+                        )
+                return pot
+
+            with ThreadPoolExecutor(max_workers=256) as executor:
+                pots = list(
+                    tqdm(
+                        executor.map(stats_task, pots),
+                        total=len(pots),
+                        desc=f"E{experiment}/Z{zone} Stats",
+                        leave=False,
+                    )
+                )
+            logger.info(
+                f"E{experiment}/zone{zone}: Computed stats in {time.time() - t0_stats:.2f}s"
+            )
+
+            # --- BLOCK 6: SAVE ---
+            logger.info(f"E{experiment}/zone{zone}: Starting SAVE block")
+            t0_save = time.time()
+
+            def save_task(pot):
+                try:
+                    plant_dir = images_base_dir / str(pot["plant_id"])
+                    plant_dir.mkdir(parents=True, exist_ok=True)
+                    warped = decode_image(pot["warped_b64"])
+                    fname = f"{pot['timestamp_str']}.jpg"
+                    fpath = plant_dir / fname
+                    warped.save(fpath)
+                    pot["image_path"] = str(
+                        fpath.relative_to(output_dir if output_dir else OFFLINE_DIR)
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save image: {e}")
+                    pot["image_path"] = None
+                return pot
+
+            with ThreadPoolExecutor(max_workers=256) as executor:
+                pots = list(
+                    tqdm(
+                        executor.map(save_task, pots),
+                        total=len(pots),
+                        desc=f"E{experiment}/Z{zone} Saving",
+                        leave=False,
+                    )
+                )
+            logger.info(
+                f"E{experiment}/zone{zone}: Saved images in {time.time() - t0_save:.2f}s"
+            )
+
+    # Combine new results
+    new_results_df = pl.DataFrame()
+    if pots:
+        rows = []
+        for pot in pots:
+            r = {
+                "experiment": pot["experiment"],
+                "zone": pot["zone"],
+                "time": pot["time"],
+                "plant_id": pot["plant_id"],
+                "cls_token": pot["cls_token"],
+                "patch_features": pot["patch_features"],
+                "image_path": pot["image_path"],
+            }
+            if pot.get("stats"):
+                r.update(pot["stats"])
+            rows.append(r)
+        new_results_df = pl.DataFrame(rows)
+
+    # Merge with cache
+    if cache_df is not None and not cache_df.is_empty():
+        if not new_results_df.is_empty():
+            combined_df = pl.concat([cache_df, new_results_df], how="diagonal")
         else:
-            pot["stats"] = None
-        return pot
+            combined_df = cache_df
+    else:
+        combined_df = new_results_df
 
-    with ThreadPoolExecutor(max_workers=256) as executor:
-        pots = list(
-            tqdm(
-                executor.map(stats_task, pots),
-                total=len(pots),
-                desc=f"E{experiment}/Z{zone} Stats",
-                leave=False,
-            )
-        )
+    if not combined_df.is_empty():
+        combined_df = combined_df.sort("time", "plant_id")
+        # Save updated cache (only if we added something new)
+        if not new_results_df.is_empty():
+            cache.save(experiment, zone, combined_df)
 
-    logger.info(
-        f"E{experiment}/zone{zone}: Computed stats in {time.time() - t0_stats:.2f}s"
-    )
-
-    # --- BLOCK 6: SAVE IMAGES ---
-    logger.info(f"E{experiment}/zone{zone}: Starting SAVE block")
-    t0_save = time.time()
-
-    def save_task(pot):
-        try:
-            # Save to images/{plant_id}/{timestamp}.jpg
-            plant_dir = images_base_dir / str(pot["plant_id"])
-            plant_dir.mkdir(parents=True, exist_ok=True)
-
-            warped_image = decode_image(pot["warped_b64"])
-            image_filename = f"{pot['timestamp_str']}.jpg"
-            image_file_path = plant_dir / image_filename
-            warped_image.save(image_file_path)
-            # Store relative path from output_dir if provided, else from OFFLINE_DIR
-            if output_dir:
-                pot["image_path"] = str(image_file_path.relative_to(output_dir))
-            else:
-                pot["image_path"] = str(image_file_path.relative_to(OFFLINE_DIR))
-        except Exception as e:
-            logger.warning(f"Failed to save image: {e}")
-            pot["image_path"] = None
-        return pot
-
-    with ThreadPoolExecutor(max_workers=256) as executor:
-        pots = list(
-            tqdm(
-                executor.map(save_task, pots),
-                total=len(pots),
-                desc=f"E{experiment}/Z{zone} Saving",
-                leave=False,
-            )
-        )
-
-    logger.info(
-        f"E{experiment}/zone{zone}: Saved images in {time.time() - t0_save:.2f}s"
-    )
-
-    # --- FINALIZE RESULTS ---
-    for pot in pots:
-        result_row = {
-            "experiment": pot["experiment"],
-            "zone": pot["zone"],
-            "time": pot["time"],
-            "plant_id": pot["plant_id"],
-            "cls_token": pot["cls_token"],
-            "patch_features": pot["patch_features"],
-            "image_path": pot["image_path"],
-        }
-        if pot.get("stats"):
-            result_row.update(pot["stats"])
-        results.append(result_row)
-
-    return results
+    return combined_df
 
 
 def transform_image_embeddings(
@@ -691,188 +728,47 @@ def transform_image_embeddings(
     """
     logger.info(f"Starting image embedding transform on {len(df)} rows")
 
-    # Get unique images (experiment, zone, time combinations)
-    unique_images = (
-        df.select(["experiment", "zone", "time", "image_name"])
-        .unique()
-        .sort("experiment", "zone", "time")
-    )
+    # We partition by experiment/zone to process each zone cache independently
+    # Note: partition_by returns a list of dataframes
+    zone_dfs = df.partition_by(["experiment", "zone"], maintain_order=True)
 
-    # Group images by (experiment, zone) and find corresponding image paths
-    zone_groups = {}
-    for row in unique_images.iter_rows(named=True):
-        experiment = row["experiment"]
-        zone = row["zone"]
-        timestamp = row["time"]
-        image_name = row["image_name"]
+    result_dfs = []
+    logger.info(f"Processing {len(zone_dfs)} zones...")
 
-        # Find the image file
-        image_path = find_image_path(experiment, zone, image_name)
-        if image_path is None:
-            continue
+    for zone_df in tqdm(zone_dfs):
+        processed_zone_df = process_zone_images(zone_df, output_dir)
+        if not processed_zone_df.is_empty():
+            result_dfs.append(processed_zone_df)
 
-        zone_key = (experiment, zone)
-        if zone_key not in zone_groups:
-            zone_groups[zone_key] = []
+    if not result_dfs:
+        logger.warning("No image results generated.")
+        # Return original (without embeddings columns) or error?
+        # If truly empty, we can return df but it lacks embeddings.
+        return df
 
-        zone_groups[zone_key].append(
-            {
-                "time": timestamp,
-                "image_path": image_path,
-            }
-        )
-
-    logger.info(
-        f"Processing {len(zone_groups)} zones with {len(unique_images)} total images"
-    )
-
-    # Store results for each detected plant
-    all_results = []
-
-    for zone_key, images in tqdm(zone_groups.items()):
-        result = process_zone_images(zone_key, images, output_dir)
-        all_results.extend(result)
-
-    # Create new dataframe with embeddings
-    logger.info(f"Creating new dataset with {len(all_results)} plant detections")
-
-    # Define base schema for key columns
-    base_schema = {
-        "experiment": df.schema["experiment"],
-        "zone": df.schema["zone"],
-        "time": df.schema["time"],
-        "plant_id": pl.Int32,
-        "image_path": pl.String,
-        "cls_token": pl.Array(pl.Float32, 768),
-        "patch_features": pl.Array(pl.Float32, (196, 768)),
-    }
-
-    # Infer schema for stats columns from first result that has stats
-    stats_schema = {}
-    for result in all_results:
-        stats_keys = [k for k in result.keys() if k not in base_schema]
-        if stats_keys:
-            for key in stats_keys:
-                value = result[key]
-                if isinstance(value, bool):
-                    stats_schema[key] = pl.Boolean
-                elif isinstance(value, int):
-                    stats_schema[key] = pl.Int64
-                elif isinstance(value, float):
-                    stats_schema[key] = pl.Float64
-                elif isinstance(value, str):
-                    stats_schema[key] = pl.String
-                else:
-                    # Default to Float64 for unknown numeric types
-                    stats_schema[key] = pl.Float64
-            break
-
-    # Combine schemas
-    full_schema = {**base_schema, **stats_schema}
-
-    df_new = pl.DataFrame(
-        all_results,
-        schema=full_schema,
-    )
+    all_results_df = pl.concat(result_dfs, how="diagonal")
 
     # Get the original dataset columns we want to preserve
     # Exclude: join keys, columns we're adding/reassigning, and stats columns that are now per-plant
-    cols_to_exclude = {
-        "plant_id",
-        "cls_token",
-        "patch_features",
-        "image_path",
-        "experiment",
-        "zone",
-        "time",
-    }
-    # Also exclude any stats columns that are now in df_new (per-plant stats)
-    cols_to_exclude.update(stats_schema.keys())
+    # The stats columns in df_new are dynamically determined, so we exclude all cols present in df_new
+    # EXCEPT keys.
 
-    original_cols_to_keep = [col for col in df.columns if col not in cols_to_exclude]
+    keys = {"experiment", "zone", "time"}
+    new_cols = set(all_results_df.columns)
+
+    # Columns to keep from ORIGINAL df: everything NOT in new_cols, plus keys
+    cols_to_keep = [c for c in df.columns if c not in new_cols or c in keys]
 
     # For each (experiment, zone, time), get one representative row from original dataset
-    df_metadata = df.select(
-        ["experiment", "zone", "time"] + original_cols_to_keep
-    ).unique(subset=["experiment", "zone", "time"], keep="first")
+    df_metadata = df.select(cols_to_keep).unique(
+        subset=["experiment", "zone", "time"], keep="first"
+    )
 
     # Join the new detections with metadata
-    df_with_embeddings = df_new.join(
+    df_with_embeddings = all_results_df.join(
         df_metadata,
         on=["experiment", "zone", "time"],
         how="left",
     )
-
-    # Reorder columns to put key columns first, then stats, then other metadata
-    key_cols = [
-        "experiment",
-        "zone",
-        "time",
-        "plant_id",
-        "image_path",
-        "cls_token",
-        "patch_features",
-    ]
-    # Stats columns come after key columns
-    stats_cols = [
-        col for col in stats_schema.keys() if col in df_with_embeddings.columns
-    ]
-    other_cols = [
-        col
-        for col in df_with_embeddings.columns
-        if col not in key_cols and col not in stats_cols
-    ]
-    df_with_embeddings = df_with_embeddings.select(key_cols + stats_cols + other_cols)
-
-    # Print statistics
-    total_embeddings = df_new.filter(pl.col("cls_token").is_not_null()).height
-    total_plants = len(df_new)
-    logger.info(f"Successfully generated {total_embeddings}/{total_plants} embeddings")
-    logger.info(f"Original dataset had {len(df)} rows")
-    logger.info(
-        f"New dataset has {len(df_with_embeddings)} rows (based on plant-cv detections)"
-    )
-
-    # Diagnostic summary for investigation
-    logger.info("\n" + "=" * 60)
-    logger.info("DIAGNOSTIC SUMMARY - Image Processing")
-    logger.info("=" * 60)
-
-    # Analyze zones by pot count
-    zone_stats = (
-        df_new.group_by(["experiment", "zone"])
-        .agg(
-            [
-                pl.col("plant_id").max().alias("max_plant_id"),
-                pl.col("time").n_unique().alias("num_images"),
-            ]
-        )
-        .sort("experiment", "zone")
-    )
-
-    logger.info("\nZone-by-zone pot counts:")
-    for row in zone_stats.iter_rows(named=True):
-        num_pots = row["max_plant_id"] + 1 if row["max_plant_id"] is not None else 0
-        status = "✓" if num_pots == 18 or num_pots == 64 else "⚠"
-        logger.info(
-            f"  {status} E{row['experiment']}/zone{row['zone']}: {num_pots} pots detected across {row['num_images']} images"
-        )
-
-    # Count zones with issues
-    zones_with_issues = zone_stats.filter(
-        (pl.col("max_plant_id").is_null()) | ((pl.col("max_plant_id") + 1) != 18)
-    )
-    logger.info(f"\nZones with issues: {len(zones_with_issues)}/{len(zone_stats)}")
-    logger.info(
-        f"Expected total rows if all zones had 18 pots: {len(unique_images) * 18}"
-    )
-    logger.info(f"Actual rows: {len(df_with_embeddings)}")
-    logger.info(
-        f"Difference: {len(unique_images) * 18 - len(df_with_embeddings)} missing detections"
-    )
-    logger.info(
-        "\nCheck visualization files in /data/offline/visualizations/ for debugging"
-    )
-    logger.info("=" * 60 + "\n")
 
     return df_with_embeddings
