@@ -1,1 +1,1 @@
-rsync -azP alien:/extra-storage/online/E14 /data/plant-rl/online/
+rsync -azP archcraft:/data/plant-rl/online/E15/P1 /data/plant-rl/online/E15/
