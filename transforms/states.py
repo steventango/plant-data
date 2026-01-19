@@ -38,11 +38,40 @@ def transform_frequencies(df: pl.DataFrame) -> pl.DataFrame:
             )
     return df
 
+
+def transform_days_since_events(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Calculate days since specific events:
+    - days_since_sterilization
+    - days_since_plate
+    - days_since_transplant
+    - days_since_dome_removal
+
+    Should be called after transform_attributes has added the event date columns.
+    """
+    df = df.with_columns(
+        (pl.col("time").dt.date() - pl.col("sterilized_date"))
+        .dt.total_days()
+        .alias("days_since_sterilization"),
+        (pl.col("time").dt.date() - pl.col("plate_date"))
+        .dt.total_days()
+        .alias("days_since_plate"),
+        (pl.col("time").dt.date() - pl.col("transplant_date"))
+        .dt.total_days()
+        .alias("days_since_transplant"),
+        (pl.col("time").dt.date() - pl.col("remove_domes_date"))
+        .dt.total_days()
+        .alias("days_since_dome_removal"),
+    )
+    return df
+
+
 def transform_state(df: pl.DataFrame) -> pl.DataFrame:
     """
     Transform state-related columns including clean area computation.
     """
     df = transform_frequencies(df)
+    df = transform_days_since_events(df)
     df = transform_wall_time(df)
     df = df.with_columns(
         pl.col("clean_area")
