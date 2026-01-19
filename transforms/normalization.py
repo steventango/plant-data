@@ -99,6 +99,14 @@ def compute_normalization_stats(df: pl.DataFrame) -> dict:
             "std": float(std_val),
         }
 
+    for col in ["red_coef_trace_0.9", "white_coef_trace_0.9", "blue_coef_trace_0.9"]:
+        if col in df.columns:
+            stats[col] = {
+                "min": 0.0,
+                "max": 1.0,
+                "mean": 0.0,
+                "std": 1.0,
+            }
 
     if "cls_token" in df.columns:
         cls_tokens = np.stack(df["cls_token"].to_numpy())
