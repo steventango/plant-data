@@ -103,13 +103,13 @@ def main():
     for file in files:
         print(file)
         lf = pl.scan_parquet(file)
-        # TODO: check utility of patch_features
-        lf = lf.drop("patch_features")
+        # TODO: fix later drop all columns starting with agent_state
+        lf = lf.drop(
+            [col for col in lf.columns if col.startswith("agent_state")] + ["patch_features"] if "patch_features" in lf.columns else []
+        )
 
         # Make image_path absolute and point to segment images
         prefix = str(file.parent)
-        # TODO: image paths need to be stored under image version key
-        prefix = prefix.replace("v20", "v18")
         lf = lf.with_columns(
             (prefix + "/" + pl.col("image_path"))
             .alias("image_path")
