@@ -134,7 +134,7 @@ def main():
     )
     df = df.with_columns(
         (
-            (pl.col("next_time").is_null() & ~pl.col("terminal") & pl.col("wall_time") < 13)
+            (pl.col("next_time").is_null() & ~pl.col("terminal") & (pl.col("wall_time") < 13))
             | (pl.col("next_time") != pl.col("time") + pl.duration(days=1))
         ).alias("truncated")
     )
