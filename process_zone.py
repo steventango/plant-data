@@ -23,12 +23,22 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     logging.info(f"Processing Experiment {exp_id}, Zone {zone_id} from {data_path}")
 
     # Check if raw.csv exists in the data_path
+    raw_csv_paths = list(Path(data_path).glob("raw*.csv"))
     raw_csv_path = Path(data_path) / "raw.csv"
-    if not raw_csv_path.exists():
+    if raw_csv_path.exists():
+        raw_csv_paths.append(raw_csv_path)
+    if not raw_csv_paths:
         logging.error(f"raw.csv not found in {data_path}")
         return None
 
-    df = pl.read_csv(raw_csv_path, try_parse_dates=True)
+    # open all and join
+    # TODO: only read some columns
+    dfs = [
+        pl.read_csv(path, try_parse_dates=True, infer_schema_length=10000)
+        for path in raw_csv_paths
+    ]
+    df = pl.concat(dfs, how="diagonal_relaxed")
+    df = df.unique(subset=["time", "plant_id"])
     df = df.with_columns(pl.col("time").dt.convert_time_zone(TIMEZONE))
     df = df.with_columns(
         pl.col("time").dt.replace(second=0, microsecond=0, ambiguous="earliest")
@@ -89,8 +99,15 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         .alias("white_coef"),
         pl.col("blue_coef").mean().over("experiment", "zone", "day").alias("blue_coef"),
     )
-    # daily subsampling
-    df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
+    subsampling = "daily"
+    if subsampling == "daily":
+        # daily subsampling
+        df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
+    elif subsampling == "hourly":
+        # hourly subsampling
+        df = df.filter(pl.col("time").dt.minute() == 30)
+    else:
+        raise ValueError(f"Unknown subsampling: {subsampling}")
 
     df = transform_action_traces(df)
 
@@ -105,10 +122,15 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))
     pl.Config.set_tbl_rows(20)
     print(
-        df.filter(
-            pl.col("plant_id") == 0
-        ).select(
-            "time", "clean_area", "red_coef", "white_coef", "blue_coef", "reward", "terminal"
+        df.filter(pl.col("plant_id") == 1).select(
+            "time",
+            "wall_time",
+            "clean_area",
+            "red_coef",
+            "white_coef",
+            "blue_coef",
+            "reward",
+            "terminal",
         )
     )
     print(

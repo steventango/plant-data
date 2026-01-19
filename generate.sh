@@ -48,5 +48,9 @@ uv run python process_zone.py --data-path /data/plant-rl/online/E14/P1/InAC10/al
 uv run python process_zone.py --data-path /data/plant-rl/online/E14/P1/InAC11/alliance-zone11
 uv run python process_zone.py --data-path /data/plant-rl/online/E14/P1/InAC12/alliance-zone12
 
+uv run python process_zone.py --data-path /data/plant-rl/online/E15/P1/InAC2/alliance-zone02
+uv run python process_zone.py --data-path /data/plant-rl/online/E15/P1/InAC3/alliance-zone03
+uv run python process_zone.py --data-path /data/plant-rl/online/E15/P1/InAC4/alliance-zone04
+
 uv run python join_zones.py --root-dir /data/plant-rl/online
 uv run python create_minari_dataset.py
