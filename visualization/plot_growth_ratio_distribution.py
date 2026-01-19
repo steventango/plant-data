@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 VERSION = "v17"
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Plot distribution of plant growth ratio (final area / initial area)."
@@ -114,7 +115,9 @@ def main():
         .sort("wall_time")
         .group_by(["experiment", "zone", "plant_id"])
         .first()
-        .select(["experiment", "zone", "plant_id", pl.col(area_col).alias("initial_area")])
+        .select(
+            ["experiment", "zone", "plant_id", pl.col(area_col).alias("initial_area")]
+        )
     )
     logging.info(f"Found {initial_areas.shape[0]} plants with initial area data")
 
@@ -128,7 +131,9 @@ def main():
         .sort("wall_time", descending=True)
         .group_by(["experiment", "zone", "plant_id"])
         .first()
-        .select(["experiment", "zone", "plant_id", pl.col(area_col).alias("final_area")])
+        .select(
+            ["experiment", "zone", "plant_id", pl.col(area_col).alias("final_area")]
+        )
     )
     logging.info(f"Found {final_areas.shape[0]} plants with final area data")
 
@@ -213,9 +218,9 @@ def main():
 
     # Plot 1: Histogram of growth ratios
     plt.figure(figsize=(12, 6))
-    
+
     unique_groups = sorted(pdf["group_key"].unique())
-    
+
     if len(unique_groups) <= 10:
         # Use different colors for each group
         for group in unique_groups:
@@ -273,7 +278,10 @@ def main():
         order = sorted(unique_groups)
     else:
         # Sort by experiment-zone
-        order = sorted(unique_groups, key=lambda x: (int(x.split("_")[0][1:]), int(x.split("_")[1][1:])))
+        order = sorted(
+            unique_groups,
+            key=lambda x: (int(x.split("_")[0][1:]), int(x.split("_")[1][1:])),
+        )
 
     sns.boxplot(data=pdf, x="group_key", y="growth_ratio", order=order)
     plt.xticks(rotation=45, ha="right")

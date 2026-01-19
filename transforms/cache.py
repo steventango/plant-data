@@ -12,13 +12,8 @@ class DiskCache:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Initialized DiskCache at {self.cache_dir}")
 
-    def get_path(
-        self, experiment: int, zone: int, num_images: int
-    ) -> Path:
-        return (
-            self.cache_dir
-            / f"E{experiment}_Z{zone:02d}_n{num_images}_cache.parquet"
-        )
+    def get_path(self, experiment: int, zone: int, num_images: int) -> Path:
+        return self.cache_dir / f"E{experiment}_Z{zone:02d}_n{num_images}_cache.parquet"
 
     def load(
         self, experiment: int, zone: int, num_images: int

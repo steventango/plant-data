@@ -8,9 +8,11 @@ import pandas as pd
 import polars as pl
 import seaborn as sns
 import numpy as np
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 VERSION = "v21"
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -87,7 +89,6 @@ def main():
     # Filter by max wall time
     df = df.filter(pl.col("wall_time") <= args.max_wall_time)
 
-
     # Normalize area if requested
     if args.normalize:
         logging.info("Normalizing area by initial area for each plant...")
@@ -113,9 +114,7 @@ def main():
         logging.info(f"Plotting IQM plant area per {group_label} (all experiments)")
 
         if args.group_by_agent:
-            df_plot = df.with_columns(
-                pl.col("agent_name").alias("group_key")
-            )
+            df_plot = df.with_columns(pl.col("agent_name").alias("group_key"))
         else:
             # Create a combined experiment-zone identifier
             df_plot = df.with_columns(

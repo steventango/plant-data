@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 VERSION = "v17"
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Plot initial plant area distribution for a specific experiment and zone."

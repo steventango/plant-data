@@ -260,7 +260,11 @@ def process_zone_images(
         f"E{experiment}/zone{zone}: Processed {len(images_to_process)} images in {time.time() - t_start:.2f}s"
     )
 
-    combined_df = pl.DataFrame(pots_results, infer_schema_length=100000) if pots_results else pl.DataFrame()
+    combined_df = (
+        pl.DataFrame(pots_results, infer_schema_length=100000)
+        if pots_results
+        else pl.DataFrame()
+    )
 
     if not combined_df.is_empty():
         combined_df = combined_df.sort("time", "plant_id")

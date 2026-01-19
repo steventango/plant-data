@@ -35,6 +35,7 @@ def test_transform_terminal_success_high(mock_session_cls, sample_df):
     assert result_df["bolted_pred"][0] == pytest.approx(0.85, abs=1e-5)
     assert result_df["terminal"][0] == 1
 
+
 @patch("transforms.terminal.requests.Session")
 def test_transform_terminal_success_low(mock_session_cls, sample_df):
     """Test successful transformation with low probability."""

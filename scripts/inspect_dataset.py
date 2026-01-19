@@ -6,7 +6,9 @@ pl.Config.set_tbl_cols(20)
 
 print(
     df.filter(
-        (pl.col("experiment") == 14) & (pl.col("zone") == 1) & (pl.col("plant_id") == 55)
+        (pl.col("experiment") == 14)
+        & (pl.col("zone") == 1)
+        & (pl.col("plant_id") == 55)
     )
     .select(
         "wall_time",

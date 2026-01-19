@@ -105,15 +105,15 @@ def main():
         lf = pl.scan_parquet(file)
         # TODO: fix later drop all columns starting with agent_state
         lf = lf.drop(
-            [col for col in lf.columns if col.startswith("agent_state")] + ["patch_features"] if "patch_features" in lf.columns else []
+            [col for col in lf.columns if col.startswith("agent_state")]
+            + ["patch_features"]
+            if "patch_features" in lf.columns
+            else []
         )
 
         # Make image_path absolute and point to segment images
         prefix = str(file.parent)
-        lf = lf.with_columns(
-            (prefix + "/" + pl.col("image_path"))
-            .alias("image_path")
-        )
+        lf = lf.with_columns((prefix + "/" + pl.col("image_path")).alias("image_path"))
 
         lazy_frames.append(lf)
 
@@ -134,22 +134,26 @@ def main():
     )
     df = df.with_columns(
         (
-            (pl.col("next_time").is_null() & ~pl.col("terminal") & (pl.col("wall_time") < 13))
+            (
+                pl.col("next_time").is_null()
+                & ~pl.col("terminal")
+                & (pl.col("wall_time") < 13)
+            )
             | (pl.col("next_time") != pl.col("time") + pl.duration(days=1))
         ).alias("truncated")
     )
     df = df.drop("next_time")
 
     pl.Config.set_tbl_rows(20)
-    print(df.filter((pl.col("experiment") == 11) & (pl.col("zone") == 1) & (pl.col("plant_id") == 0)).select(
-        "wall_time",
-        "time",
-        "clean_area",
-        "reward",
-        "nodata",
-        "outlier",
-        "valid"
-    ))
+    print(
+        df.filter(
+            (pl.col("experiment") == 11)
+            & (pl.col("zone") == 1)
+            & (pl.col("plant_id") == 0)
+        ).select(
+            "wall_time", "time", "clean_area", "reward", "nodata", "outlier", "valid"
+        )
+    )
 
     # Save to parquet
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -49,10 +49,7 @@ for episode in offline_dataset.iterate_episodes():
 episode_index = 1300
 episode = offline_dataset[episode_index]
 print(episode)
-print({
-    key: value[0]
-    for key, value in episode.infos.items()
-})
+print({key: value[0] for key, value in episode.infos.items()})
 
 # Extract data from the first episode
 episode_length = len(episode.observations) - 1

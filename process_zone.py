@@ -34,16 +34,21 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
 
     # open all and join
     dfs = [
-        pl.read_csv(path, try_parse_dates=True, infer_schema_length=10000, columns=[
-            "time",
-            "image_name",
-            "action.0",
-            "action.1",
-            "action.2",
-            "action.3",
-            "action.4",
-            "action.5",
-        ])
+        pl.read_csv(
+            path,
+            try_parse_dates=True,
+            infer_schema_length=10000,
+            columns=[
+                "time",
+                "image_name",
+                "action.0",
+                "action.1",
+                "action.2",
+                "action.3",
+                "action.4",
+                "action.5",
+            ],
+        )
         for path in raw_csv_paths
     ]
     df = pl.concat(dfs, how="diagonal_relaxed")

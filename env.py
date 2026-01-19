@@ -38,12 +38,10 @@ class MockEnv(gym.Env):
         self.embedding_dim = 768
 
         self.low = np.array(
-            [stats[col]["min"] for col in self.cols]
-            + [-np.inf] * self.embedding_dim
+            [stats[col]["min"] for col in self.cols] + [-np.inf] * self.embedding_dim
         ).astype(np.float32)
         self.high = np.array(
-            [stats[col]["max"] for col in self.cols]
-            + [np.inf] * self.embedding_dim
+            [stats[col]["max"] for col in self.cols] + [np.inf] * self.embedding_dim
         ).astype(np.float32)
         self.observation_space = spaces.Box(
             low=self.low, high=self.high, dtype=np.float32
