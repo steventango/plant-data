@@ -5,7 +5,7 @@ from pathlib import Path
 import polars as pl
 from minari import DataCollector
 
-from config import VERSION
+from config import VERSION, COLS
 from env import MockEnv
 from transforms.normalization import load_normalization_stats
 
@@ -35,29 +35,6 @@ def main():
 
     stats = load_normalization_stats(input_dir / f"normalization-stats-{VERSION}.json")
 
-    cols = [
-        "wall_time",
-        "clean_area",
-        "clean_convex_hull_area",
-        "clean_solidity",
-        "clean_perimeter",
-        "clean_width",
-        "clean_height",
-        "clean_longest_path",
-        "clean_center_of_mass_x",
-        "clean_center_of_mass_y",
-        "clean_convex_hull_vertices",
-        "clean_ellipse_center_x",
-        "clean_ellipse_center_y",
-        "clean_ellipse_major_axis",
-        "clean_ellipse_minor_axis",
-        "clean_ellipse_angle",
-        "clean_ellipse_eccentricity",
-        "red_coef_trace_0.9",
-        "white_coef_trace_0.9",
-        "blue_coef_trace_0.9",
-    ]
-
     df = df.filter(~pl.col("outlier"))
     df_filtered = df.filter(pl.col("day") < 14)
     df = df.with_columns(
@@ -71,7 +48,7 @@ def main():
     )
 
     def create_dataset(df: pl.DataFrame, name: str):
-        mock_env = MockEnv(df, stats, cols)
+        mock_env = MockEnv(df, stats, COLS)
         env = DataCollector(mock_env, record_infos=True)
 
         # Run episodes until environment indicates all data has been processed
