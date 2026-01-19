@@ -36,7 +36,6 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     dfs = [
         pl.read_csv(path, try_parse_dates=True, infer_schema_length=10000, columns=[
             "time",
-            "plant_id",
             "image_name",
             "action.0",
             "action.1",
@@ -48,30 +47,26 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         for path in raw_csv_paths
     ]
     df = pl.concat(dfs, how="diagonal_relaxed")
-    df = df.unique(subset=["time", "plant_id"])
+    df = df.unique(subset=["time"])
     df = df.with_columns(pl.col("time").dt.convert_time_zone(TIMEZONE))
     df = df.with_columns(
         pl.col("time").dt.replace(second=0, microsecond=0, ambiguous="earliest")
     )
-    # drop plant_ids other than 0
-    df = df.filter(pl.col("plant_id") == 0)
     assert df.filter((pl.col("time").dt.minute() % 5 != 0)).is_empty()
-    # fill in missing time steps, print how many were missing
+    # fill in missing time steps
     min_time: datetime = df["time"].min()  # type: ignore
     max_time: datetime = df["time"].max()  # type: ignore
     all_times = pl.datetime_range(min_time, max_time, interval="5m", eager=True)
-    plant_ids = df.select(pl.col("plant_id")).unique()
     times_df = pl.DataFrame(data={"time": all_times})
-    grid = times_df.join(plant_ids, how="cross")
-    df = grid.join(df, on=["time", "plant_id"], how="left")
-    df = df.sort("time", "plant_id")
+    df = times_df.join(df, on=["time"], how="left")
+    df = df.sort("time")
     df = transform_experiment_attributes(df, exp_id, zone_id)
     df = df.filter(
         pl.col("time")
         .dt.time()
         .is_between(time(9, tzinfo=tzinfo), time(21, tzinfo=tzinfo))
     )
-    df = df.sort("time", "plant_id")
+    df = df.sort("time")
     print(
         f"E{exp_id}/zone{zone_id}: missing {df['action.0'].is_null().sum()} time steps"
     )
@@ -85,12 +80,13 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     )
 
     df = df.with_columns(
-        pl.col("action.0").fill_null(strategy="forward").over("plant_id"),
-        pl.col("action.1").fill_null(strategy="forward").over("plant_id"),
-        pl.col("action.2").fill_null(strategy="forward").over("plant_id"),
-        pl.col("action.3").fill_null(strategy="forward").over("plant_id"),
-        pl.col("action.4").fill_null(strategy="forward").over("plant_id"),
-        pl.col("action.5").fill_null(strategy="forward").over("plant_id"),
+        pl.col("image_name").fill_null(strategy="forward"),
+        pl.col("action.0").fill_null(strategy="forward"),
+        pl.col("action.1").fill_null(strategy="forward"),
+        pl.col("action.2").fill_null(strategy="forward"),
+        pl.col("action.3").fill_null(strategy="forward"),
+        pl.col("action.4").fill_null(strategy="forward"),
+        pl.col("action.5").fill_null(strategy="forward"),
     )
     df = transform_action(df)
     df = df.filter(
