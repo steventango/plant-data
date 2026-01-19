@@ -8,7 +8,6 @@ import polars as pl
 from config import GOOD_ZONE_DAYS, TIMEZONE, tzinfo, VERSION
 from transforms import (
     transform_action,
-    transform_drop_old_cols,
     transform_action_traces,
     transform_image_embeddings,
     transform_reward,
@@ -75,8 +74,6 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     print(
         f"E{exp_id}/zone{zone_id}: missing {df['action.0'].is_null().sum()} time steps"
     )
-
-    df = transform_drop_old_cols(df)
 
     df = df.with_columns(
         ((pl.col("time").dt.date() - df["time"].dt.date().min()).dt.total_days()).alias(
