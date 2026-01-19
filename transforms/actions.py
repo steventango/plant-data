@@ -57,7 +57,6 @@ def transform_action(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("action.3").mean(),
         pl.col("action.4").mean(),
         pl.col("action.5").mean(),
-        pl.col("clean_area").mean(),
     ).sort("time")
     df2 = df2.with_columns(
         pl.concat_arr(

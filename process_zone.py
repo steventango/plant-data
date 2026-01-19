@@ -33,9 +33,18 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         return None
 
     # open all and join
-    # TODO: only read some columns
     dfs = [
-        pl.read_csv(path, try_parse_dates=True, infer_schema_length=10000)
+        pl.read_csv(path, try_parse_dates=True, infer_schema_length=10000, columns=[
+            "time",
+            "plant_id",
+            "image_name",
+            "action.0",
+            "action.1",
+            "action.2",
+            "action.3",
+            "action.4",
+            "action.5",
+        ])
         for path in raw_csv_paths
     ]
     df = pl.concat(dfs, how="diagonal_relaxed")
@@ -64,7 +73,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     )
     df = df.sort("time", "plant_id")
     print(
-        f"E{exp_id}/zone{zone_id}: missing {df['clean_area'].is_null().sum()} time steps"
+        f"E{exp_id}/zone{zone_id}: missing {df['action.0'].is_null().sum()} time steps"
     )
 
     df = transform_drop_old_cols(df)
