@@ -5,62 +5,92 @@ import polars as pl
 EXPERIMENT_EVENTS = {
     8: {
         "transplant_date": date(2025, 5, 2),
-        "water_transplant_l": 1.0,
+        "watering": {
+            date(2025, 5, 2): 1.0,
+        },
+        "num_pots_per_tray": 18,
     },
     9: {
         "sterilized_date": date(2025, 5, 12),
         "plate_date": date(2025, 5, 15),
         "transplant_date": date(2025, 5, 23),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 5, 26),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 5, 23): 1.0,
+            date(2025, 5, 26): 2.0,
+        },
+        "num_pots_per_tray": 18,
     },
     10: {
         "sterilized_date": date(2025, 6, 16),
         "plate_date": date(2025, 6, 19),
         "transplant_date": date(2025, 6, 27),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 6, 30),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 6, 27): 1.0,
+            date(2025, 6, 30): 2.0,
+        },
+        "num_pots_per_tray": 18,
     },
     11: {
         "sterilized_date": date(2025, 6, 30),
         "plate_date": date(2025, 7, 3),
         "transplant_date": date(2025, 7, 11),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 7, 14),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 7, 11): 1.0,
+            date(2025, 7, 14): 2.0,
+        },
+        "num_pots": 18,
+        "num_pots_per_tray": 18,
     },
     12: {
         "sterilized_date": date(2025, 9, 2),
         "plate_date": date(2025, 9, 5),
         "transplant_date": date(2025, 9, 12),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 9, 15),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 9, 12): 1.0,
+            date(2025, 9, 15): 2.0,
+        },
+        "num_pots": 18,
+        "num_pots_per_tray": 18,
     },
     13: {
         "sterilized_date": date(2025, 9, 27),
         "plate_date": date(2025, 10, 1),  # Corrected from Sept 31
         "transplant_date": date(2025, 10, 2),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 10, 5),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 10, 2): 1.0,
+            date(2025, 10, 5): 2.0,
+        },
+        "num_pots": 64,
+        "num_pots_per_tray": 32,
     },
     14: {
         "sterilized_date": date(2025, 10, 27),
         "transplant_date": date(2025, 11, 4),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 11, 7),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 11, 4): 1.0,
+            date(2025, 11, 7): 2.0,
+            date(2025, 11, 17): 2.0,
+        },
+        "num_pots": 64,
+        "num_pots_per_tray": 32,
     },
     15: {
         "sterilized_date": date(2025, 12, 1),
         "plate_date": date(2025, 12, 4),
         "transplant_date": date(2025, 12, 11),
-        "water_transplant_l": 1.0,
         "remove_domes_date": date(2025, 12, 15),
-        "water_remove_domes_l": 2.0,
+        "watering": {
+            date(2025, 12, 11): 1.0,
+            date(2025, 12, 15): 2.0,
+        },
+        "num_pots": 64,
+        "num_pots_per_tray": 32,
     },
 }
 
@@ -130,6 +160,8 @@ def transform_experiment_attributes(
 
         cols_to_add = []
         for key, value in events.items():
+            if key == "watering":
+                continue
             cols_to_add.append(pl.lit(value).alias(key))
 
         if cols_to_add:
