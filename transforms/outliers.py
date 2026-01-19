@@ -12,18 +12,23 @@ def transform_outlier_detection(
         q2: Upper percentile threshold
 
     Returns:
-        DataFrame with added "valid" column indicating non-outlier rows
+        DataFrame with added "nodata", "outlier", "valid" columns indicating valid rows
     """
-    # if reward is nan / inf, mark as invalid
-    df = df.with_columns(
-        (pl.col("reward").is_nan() | pl.col("reward").is_infinite()).alias("outlier")
-    )
-    invalid_count = df["outlier"].sum()
+    # if clean_area is 0, mark as nodata
+    df = df.with_columns((pl.col("clean_area") == 0).alias("nodata"))
+    nodata_count = df["nodata"].sum()
+    print(f"marked {nodata_count} / {df.height} daily rows as nodata")
     ql = df["reward"].quantile(q1)
     qu = df["reward"].quantile(q2)
     df = df.with_columns(
-        ((pl.col("reward") < ql) | (pl.col("reward") > qu)).alias("outlier")
+        ((pl.col("reward") < ql) | (pl.col("reward") > qu))
+        .fill_null(False)
+        .alias("outlier")
     )
-    invalid_count = df["outlier"].sum()
-    print(f"marked {invalid_count} / {df.height} daily rows as outliers")
+    outlier_count = df["outlier"].sum()
+    print(f"marked {outlier_count} / {df.height} daily rows as outliers")
+    # valid is not nodata and not outlier
+    df = df.with_columns((~(pl.col("nodata") | pl.col("outlier"))).alias("valid"))
+    valid_count = df["valid"].sum()
+    print(f"marked {valid_count} / {df.height} daily rows as valid")
     return df
