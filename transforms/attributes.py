@@ -3,14 +3,13 @@ import polars as pl
 
 
 EXPERIMENT_EVENTS = {
-    8: {
+    7: {
         "transplant_date": date(2025, 5, 2),
         "watering": {
             date(2025, 5, 2): 1.0,
         },
-        "num_pots_per_tray": 18,
     },
-    9: {
+    8: {
         "sterilized_date": date(2025, 5, 12),
         "plate_date": date(2025, 5, 15),
         "transplant_date": date(2025, 5, 23),
@@ -19,9 +18,8 @@ EXPERIMENT_EVENTS = {
             date(2025, 5, 23): 1.0,
             date(2025, 5, 26): 2.0,
         },
-        "num_pots_per_tray": 18,
     },
-    10: {
+    9: {
         "sterilized_date": date(2025, 6, 16),
         "plate_date": date(2025, 6, 19),
         "transplant_date": date(2025, 6, 27),
@@ -30,9 +28,8 @@ EXPERIMENT_EVENTS = {
             date(2025, 6, 27): 1.0,
             date(2025, 6, 30): 2.0,
         },
-        "num_pots_per_tray": 18,
     },
-    11: {
+    10: {
         "sterilized_date": date(2025, 6, 30),
         "plate_date": date(2025, 7, 3),
         "transplant_date": date(2025, 7, 11),
@@ -40,6 +37,16 @@ EXPERIMENT_EVENTS = {
         "watering": {
             date(2025, 7, 11): 1.0,
             date(2025, 7, 14): 2.0,
+        },
+        "num_pots": 20,
+        "num_pots_per_tray": 20,
+    },
+    11: {
+        # missing data
+        "transplant_date": date(2025, 8, 15),
+        "watering": {
+            # ?
+            date(2025, 8, 15): 2.0,
         },
         "num_pots": 18,
         "num_pots_per_tray": 18,

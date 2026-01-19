@@ -56,13 +56,10 @@ def test_transform_experiment_attributes_with_events():
     # Check if columns exist
     assert "sterilized_date" in df_out.columns
     assert "transplant_date" in df_out.columns
-    assert "num_pots_per_tray" in df_out.columns
 
     # Check values
     year = 2025
     # E9 sterilized: May 12
-    assert df_out["sterilized_date"][0] == datetime.date(year, 5, 12)
+    assert df_out["sterilized_date"][0] == datetime.date(year, 6, 16)
     # E9 transplant: May 23
-    assert df_out["transplant_date"][0] == datetime.date(year, 5, 23)
-    # E9 num_pots_per_tray: 18
-    assert df_out["num_pots_per_tray"][0] == 18
+    assert df_out["transplant_date"][0] == datetime.date(year, 6, 27)
