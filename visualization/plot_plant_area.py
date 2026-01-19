@@ -10,7 +10,7 @@ import seaborn as sns
 import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-VERSION = "v17"
+VERSION = "v21"
 
 def main():
     parser = argparse.ArgumentParser(
@@ -46,6 +46,12 @@ def main():
         action="store_true",
         help="Normalize each plant's area by its initial area",
     )
+    parser.add_argument(
+        "--max-wall-time",
+        default=13.0,
+        type=float,
+        help="Number of days to plot",
+    )
     args = parser.parse_args()
 
     try:
@@ -78,25 +84,9 @@ def main():
     logging.info("Sorting data...")
     df = df.sort(["experiment", "zone", "plant_id", "time"])
 
-    # Handle truncation
-    if "truncated" in df.columns:
-        logging.info("Filtering truncated trajectories...")
-        # Keep rows up to and including the first truncation event for each plant
-        # We shift by 1 so that the truncation event itself is kept (cum_max becomes True on the NEXT row)
-        mask = (
-            pl.col("truncated")
-            .fill_null(False)
-            .shift(1, fill_value=False)
-            .cum_max()
-            .not_()
-            .over(["experiment", "zone", "plant_id"])
-        )
-        original_count = df.shape[0]
-        df = df.filter(mask)
-        filtered_count = df.shape[0]
-        logging.info(
-            f"Filtered {original_count - filtered_count} rows due to truncation"
-        )
+    # Filter by max wall time
+    df = df.filter(pl.col("wall_time") <= args.max_wall_time)
+
 
     # Normalize area if requested
     if args.normalize:
@@ -123,37 +113,9 @@ def main():
         logging.info(f"Plotting IQM plant area per {group_label} (all experiments)")
 
         if args.group_by_agent:
-            # Map experiment/zone to Agent
             df_plot = df.with_columns(
-                pl.when(pl.col("experiment").is_in([11, 12]))
-                .then(pl.lit("Uniform_Discrete"))
-                .when(pl.col("experiment") == 13)
-                .then(pl.lit("Uniform_Dirichlet"))
-                .when(pl.col("experiment") == 14)
-                .then(
-                    pl.when(pl.col("zone") == 1)
-                    .then(pl.lit("Constant_White"))
-                    .when(pl.col("zone") == 2)
-                    .then(pl.lit("InAC_Data_Det"))
-                    .when(pl.col("zone").is_in([3, 4, 5, 6]))
-                    .then(pl.lit("InAC_Data_Sto"))
-                    .when(pl.col("zone") == 8)
-                    .then(pl.lit("InAC_GP_Det_Opt0"))
-                    .when(pl.col("zone") == 9)
-                    .then(pl.lit("InAC_GP_Det_Opt0.25"))
-                    .when(pl.col("zone") == 10)
-                    .then(pl.lit("InAC_GP_Det_Opt0.5"))
-                    .when(pl.col("zone") == 11)
-                    .then(pl.lit("InAC_GP_Det_Opt0.75"))
-                    .when(pl.col("zone") == 12)
-                    .then(pl.lit("InAC_GP_Det_Opt1"))
-                    .otherwise(pl.lit("Other_E14"))
-                )
-                .otherwise(pl.lit("Other"))
-                .alias("group_key")
+                pl.col("agent_name").alias("group_key")
             )
-            # Filter out "Other" agents
-            df_plot = df_plot.filter(~pl.col("group_key").str.contains("Other"))
         else:
             # Create a combined experiment-zone identifier
             df_plot = df.with_columns(
@@ -166,25 +128,6 @@ def main():
 
         # Convert to pandas for plotting
         pdf = df_plot.to_pandas()
-
-        # Define IQM (Interquartile Mean) estimator function
-        def iqm(x):
-            """Calculate the interquartile mean (mean of values between Q1 and Q3)"""
-            import numpy as np
-
-            x = np.asarray(x)
-            x = x[~np.isnan(x)]
-            if len(x) < 4:
-                # Not enough data points for IQM, fall back to mean
-                return np.mean(x) if len(x) > 0 else np.nan
-            q1, q3 = np.percentile(
-                x, [args.lower_quantile * 100, args.upper_quantile * 100]
-            )
-            iqr_values = x[(x >= q1) & (x <= q3)]
-            if len(iqr_values) == 0:
-                # Edge case: all values are the same or very few unique values
-                return np.mean(x)
-            return np.mean(iqr_values)
 
         # Pre-calculate IQM and CI for each timestamp
         logging.info("Calculating IQM and CI for each timestamp...")
@@ -201,7 +144,7 @@ def main():
             if len(vals) == 0:
                 continue
 
-            val_iqm = iqm(vals)
+            val_iqm = np.mean(vals)
 
             # Bootstrap CI (95%)
             ci_low, ci_high = val_iqm, val_iqm
@@ -212,15 +155,7 @@ def main():
                     resamples = np.random.choice(
                         vals, (n_boot, len(vals)), replace=True
                     )
-                    # Calculate IQM for each resample
-                    q1 = np.percentile(resamples, 25, axis=1, keepdims=True)
-                    q3 = np.percentile(resamples, 75, axis=1, keepdims=True)
-                    mask = (resamples >= q1) & (resamples <= q3)
-                    # Handle case where mask sum is 0 (should be rare/impossible with sufficient data)
-                    counts = np.sum(mask, axis=1)
-                    # Avoid division by zero
-                    counts[counts == 0] = 1
-                    means = np.sum(resamples * mask, axis=1) / counts
+                    means = np.mean(resamples, axis=1)
                     ci_low, ci_high = np.percentile(means, [2.5, 97.5])
                 except Exception:
                     # Fallback if bootstrap fails
@@ -257,7 +192,7 @@ def main():
                 highs = group["ci_high"].values
 
                 # Find gaps in time
-                gap_threshold = 1.5 / 24
+                gap_threshold = 1
                 gap_indices = np.where(np.diff(times) > gap_threshold)[0] + 1
 
                 start_idx = 0
