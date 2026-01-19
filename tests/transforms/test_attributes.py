@@ -1,5 +1,6 @@
+import datetime
 import polars as pl
-import pytest
+
 from transforms.attributes import get_agent_name, transform_experiment_attributes
 
 
@@ -41,3 +42,27 @@ def test_transform_experiment_attributes():
     assert df_out["experiment"].unique()[0] == exp_id
     assert df_out["zone"].unique()[0] == zone_id
     assert df_out["agent"].unique()[0] == "Constant_White"
+
+
+def test_transform_experiment_attributes_with_events():
+    df = pl.DataFrame({"data": [1]})
+
+    # Test Experiment 9 which has multiple events
+    exp_id = 9
+    zone_id = 1
+
+    df_out = transform_experiment_attributes(df, exp_id, zone_id)
+
+    # Check if columns exist
+    assert "sterilized_date" in df_out.columns
+    assert "transplant_date" in df_out.columns
+    assert "water_transplant_l" in df_out.columns
+
+    # Check values
+    year = 2025
+    # E9 sterilized: May 12
+    assert df_out["sterilized_date"][0] == datetime.date(year, 5, 12)
+    # E9 transplant: May 23
+    assert df_out["transplant_date"][0] == datetime.date(year, 5, 23)
+    # E9 water transplant: 1.0L
+    assert df_out["water_transplant_l"][0] == 1.0

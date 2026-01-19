@@ -1,4 +1,68 @@
+from datetime import date
 import polars as pl
+
+
+EXPERIMENT_EVENTS = {
+    8: {
+        "transplant_date": date(2025, 5, 2),
+        "water_transplant_l": 1.0,
+    },
+    9: {
+        "sterilized_date": date(2025, 5, 12),
+        "plate_date": date(2025, 5, 15),
+        "transplant_date": date(2025, 5, 23),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 5, 26),
+        "water_remove_domes_l": 2.0,
+    },
+    10: {
+        "sterilized_date": date(2025, 6, 16),
+        "plate_date": date(2025, 6, 19),
+        "transplant_date": date(2025, 6, 27),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 6, 30),
+        "water_remove_domes_l": 2.0,
+    },
+    11: {
+        "sterilized_date": date(2025, 6, 30),
+        "plate_date": date(2025, 7, 3),
+        "transplant_date": date(2025, 7, 11),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 7, 14),
+        "water_remove_domes_l": 2.0,
+    },
+    12: {
+        "sterilized_date": date(2025, 9, 2),
+        "plate_date": date(2025, 9, 5),
+        "transplant_date": date(2025, 9, 12),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 9, 15),
+        "water_remove_domes_l": 2.0,
+    },
+    13: {
+        "sterilized_date": date(2025, 9, 27),
+        "plate_date": date(2025, 10, 1),  # Corrected from Sept 31
+        "transplant_date": date(2025, 10, 2),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 10, 5),
+        "water_remove_domes_l": 2.0,
+    },
+    14: {
+        "sterilized_date": date(2025, 10, 27),
+        "transplant_date": date(2025, 11, 4),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 11, 7),
+        "water_remove_domes_l": 2.0,
+    },
+    15: {
+        "sterilized_date": date(2025, 12, 1),
+        "plate_date": date(2025, 12, 4),
+        "transplant_date": date(2025, 12, 11),
+        "water_transplant_l": 1.0,
+        "remove_domes_date": date(2025, 12, 15),
+        "water_remove_domes_l": 2.0,
+    },
+}
 
 
 def get_agent_name(df: pl.DataFrame) -> pl.DataFrame:
@@ -53,9 +117,22 @@ def transform_experiment_attributes(
     - experiment ID
     - zone ID
     - agent name (derived from experiment and zone)
+    - dates and water amounts from EXPERIMENT_EVENTS
     """
     df = df.with_columns(
         pl.lit(exp_id).alias("experiment"),
         pl.lit(zone_id).alias("zone"),
     )
-    return get_agent_name(df)
+    df = get_agent_name(df)
+
+    if exp_id in EXPERIMENT_EVENTS:
+        events = EXPERIMENT_EVENTS[exp_id]
+
+        cols_to_add = []
+        for key, value in events.items():
+            cols_to_add.append(pl.lit(value).alias(key))
+
+        if cols_to_add:
+            df = df.with_columns(cols_to_add)
+
+    return df
