@@ -14,6 +14,7 @@ from transforms import (
     transform_reward,
     transform_state,
     transform_terminal,
+    transform_experiment_attributes,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -55,10 +56,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     grid = times_df.join(plant_ids, how="cross")
     df = grid.join(df, on=["time", "plant_id"], how="left")
     df = df.sort("time", "plant_id")
-    df = df.with_columns(
-        pl.lit(exp_id).alias("experiment"),
-        pl.lit(zone_id).alias("zone"),
-    )
+    df = transform_experiment_attributes(df, exp_id, zone_id)
     df = df.filter(
         pl.col("time")
         .dt.time()

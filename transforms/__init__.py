@@ -1,4 +1,5 @@
 from .actions import transform_action, transform_action_traces
+from .attributes import get_agent_name, transform_experiment_attributes
 from .drop import transform_drop_old_cols
 from .images import transform_image_embeddings
 from .labels import import_labels
@@ -25,4 +26,6 @@ __all__ = [
     "transform_reward",
     "transform_state",
     "transform_terminal",
+    "transform_experiment_attributes",
+    "get_agent_name",
 ]
