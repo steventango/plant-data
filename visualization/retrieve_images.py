@@ -2,6 +2,7 @@ import polars as pl
 import shutil
 from pathlib import Path
 import argparse
+import datetime
 
 
 def main():
@@ -9,15 +10,25 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default="/data/plant-rl/offline/cleaned_offline_dataset_continuous_v16.parquet",
+        default="/data/plant-rl/offline/v21/mixed-v21.parquet",
         help="Path to parquet file",
     )
     parser.add_argument(
-        "--target-area",
-        "-t",
-        default=400,
-        type=float,
-        help="Target area for filtering",
+        "--raw",
+        action="store_true",
+        help="Retrieve raw images instead of processed ones",
+    )
+    parser.add_argument(
+        "--experiment",
+        "-e",
+        type=int,
+        help="Experiment number to filter for",
+    )
+    parser.add_argument(
+        "--zone",
+        "-z",
+        type=int,
+        help="Zone number to filter for",
     )
     parser.add_argument(
         "--out",
@@ -28,7 +39,7 @@ def main():
     args = parser.parse_args()
     parquet_file = args.parquet
     output_dir = Path(args.out)
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(exist_ok=True, parents=True)
 
     print(f"Reading {parquet_file}...")
     try:
@@ -36,6 +47,12 @@ def main():
     except Exception as e:
         print(f"Failed to read parquet: {e}")
         return
+
+    # Filter by experiment and zone if provided
+    if args.experiment is not None:
+        df = df.filter(pl.col("experiment") == args.experiment)
+    if args.zone is not None:
+        df = df.filter(pl.col("zone") == args.zone)
 
     # Prefilter to 9:30 AM rows
     df = df.filter(pl.col("time").dt.hour() == 9)
@@ -52,26 +69,60 @@ def main():
 
     print(f"Using area column: {area_col}")
 
-    # Filter for valid area and image_path
-    df = df.filter(pl.col(area_col).is_not_null() & pl.col("image_path").is_not_null())
+    # Filter for valid image_path
+    df = df.filter(pl.col("image_path").is_not_null())
 
-    # Calculate distance to target area
-    target_area = args.target_area
-    df = df.with_columns((pl.col(area_col) - target_area).abs().alias("area_diff"))
-
-    # Sort by difference and take top 30
-    top_30 = df.sort("area_diff").head(30)
-
-    print(f"Found {len(top_30)} images closest to area {target_area}")
+    results = df.unique(subset=["image_path"]).sort("time")
+    print(f"Found {len(results)} unique images matching filters")
 
     # Copy images
     count = 0
-    for row in top_30.iter_rows(named=True):
+    seen_paths = set()
+    for row in results.iter_rows(named=True):
         rel_path = row["image_path"]
-        full_path = Path("/data/offline") / rel_path
+        # In the parquet, image_path is absolute or relative
+        full_path = Path(rel_path)
+        if not full_path.is_absolute():
+            full_path = Path("/data/offline") / rel_path
 
-        dest_name = f"area_{row[area_col]:.2f}_{Path(rel_path).name}"
+        if args.raw:
+            # The raw images are named using UTC time: YYYY-MM-DDTHHMMSS+0000_left.jpg
+            # Convert the local time to UTC for the lookup
+            utc_time = row["time"].astimezone(datetime.timezone.utc)
+            timestamp_utc = utc_time.strftime("%Y-%m-%dT%H%M%S")
+
+            if "/processed/" in str(full_path):
+                zone_root = Path(str(full_path).split("/processed/")[0])
+                raw_dir = zone_root / "images"
+
+                # Search for the raw image with timestamp +0000_left.jpg
+                potential_raw = raw_dir / f"{timestamp_utc}+0000_left.jpg"
+                if potential_raw.exists():
+                    full_path = potential_raw
+                else:
+                    # Try a glob if the exact name doesn't match
+                    matches = list(raw_dir.glob(f"{timestamp_utc}*"))
+                    if matches:
+                        full_path = matches[0]
+                    else:
+                        print(
+                            f"Could not find raw image for {timestamp_utc} (local {row['time']}) in {raw_dir}"
+                        )
+                        continue
+
+        # Use time and zone in name if possible
+        timestamp = row["time"].strftime("%Y%m%d_%H%M%S")
+        prefix = f"E{row['experiment']}_Z{row['zone']}_"
+        if args.target_area is not None:
+            dest_name = f"{prefix}area_{row[area_col]:.2f}_{timestamp}_{full_path.name}"
+        else:
+            dest_name = f"{prefix}{timestamp}_{full_path.name}"
+
         dest_path = output_dir / dest_name
+
+        if dest_path in seen_paths:
+            continue
+        seen_paths.add(dest_path)
 
         try:
             shutil.copy2(full_path, dest_path)
