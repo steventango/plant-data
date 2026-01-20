@@ -28,7 +28,7 @@ def main():
         "--day-cutoff", type=float, default=14.0, help="Day cutoff (wall_time)"
     )
     parser.add_argument("--output", type=str, help="Output video path")
-    parser.add_argument("--framerate", type=int, default=10, help="Video framerate")
+    parser.add_argument("--framerate", type=int, default=1, help="Video framerate")
 
     args = parser.parse_args()
 
@@ -95,7 +95,7 @@ def main():
         font = None
         for path in font_paths:
             if os.path.exists(path):
-                font = ImageFont.truetype(path, 40)
+                font = ImageFont.truetype(path, 24)
                 break
         if font is None:
             font = ImageFont.load_default()
