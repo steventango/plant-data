@@ -1,31 +1,13 @@
-import numpy as np
 import json
 import logging
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
-logger = logging.getLogger(__name__)
+from config import COLS
 
-FEATURE_COLUMNS = [
-    "wall_time",
-    "clean_area",
-    "clean_convex_hull_area",
-    "clean_solidity",
-    "clean_perimeter",
-    "clean_width",
-    "clean_height",
-    "clean_longest_path",
-    "clean_center_of_mass_x",
-    "clean_center_of_mass_y",
-    "clean_convex_hull_vertices",
-    "clean_ellipse_center_x",
-    "clean_ellipse_center_y",
-    "clean_ellipse_major_axis",
-    "clean_ellipse_minor_axis",
-    "clean_ellipse_angle",
-    "clean_ellipse_eccentricity",
-]
+logger = logging.getLogger(__name__)
 
 
 def get_feature_columns(df: pl.DataFrame) -> list[str]:
@@ -40,7 +22,7 @@ def get_feature_columns(df: pl.DataFrame) -> list[str]:
     feature_cols = []
 
     # Add explicitly named feature columns
-    for col in FEATURE_COLUMNS:
+    for col in COLS:
         if col in df.columns:
             feature_cols.append(col)
 
