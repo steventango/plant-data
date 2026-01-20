@@ -13,7 +13,6 @@ class MockEnv(gym.Env):
         df: pl.DataFrame,
         stats: dict,
         cols: list,
-        include_action_traces: bool = True,
     ):
         super().__init__()
         self.df = df.sort("experiment", "zone", "plant_id", "time")
@@ -31,7 +30,6 @@ class MockEnv(gym.Env):
         self.truncated_episode_key = None
         self.truncated_row_index = 0
         self.completed_episodes = set()  # Track completed episodes
-        self.include_action_traces = include_action_traces
         self.stats = stats
         self.cols = cols
         self.done = False
@@ -116,6 +114,7 @@ class MockEnv(gym.Env):
     ) -> tuple[ObsType, dict[str, Any]]:  # type: ignore
         super().reset(seed=seed)
 
+        episode_continued = False
         # If we were truncated, continue from where we left off
         if self.was_truncated and self.truncated_episode_key is not None:
             self.current_episode_key = self.truncated_episode_key
@@ -123,14 +122,9 @@ class MockEnv(gym.Env):
             self.was_truncated = False
             self.truncated_episode_key = None
             self.truncated_row_index = 0
-
-            # Get the plant data (should already be set, but refresh to be safe)
-            self.plant_df = self.df.filter(
-                (pl.col("experiment") == self.current_episode_key[0])
-                & (pl.col("zone") == self.current_episode_key[1])
-                & (pl.col("plant_id") == self.current_episode_key[2])
-            ).sort("time")
-        else:
+            if len(self.plant_df) < 2:
+                episode_continued = False
+        if not episode_continued:
             # Select the next episode (cycle through all unique experiment-zone-plant combinations)
             # Skip episodes that are already completed
             while self.current_episode_index < len(self.episode_keys):
@@ -180,18 +174,16 @@ class MockEnv(gym.Env):
 
         # Check if we've reached the end of this plant's data
         end_of_df = self.current_row_index == self.plant_df.height - 1
+        if end_of_df or terminal:
+            self.completed_episodes.add(self.current_episode_key)
         if end_of_df and not terminal:
             truncated = True
 
         # If truncated, save state to continue from this point in next reset
-        if truncated and not terminal and not end_of_df:
+        if truncated and not terminal:
             self.was_truncated = True
             self.truncated_episode_key = self.current_episode_key
             self.truncated_row_index = self.current_row_index
-        elif terminal or end_of_df:
-            # Episode completed naturally, mark it as done
-            if self.current_episode_key is not None:
-                self.completed_episodes.add(self.current_episode_key)
 
         obs = self._get_observation()
         info = self._get_info()
