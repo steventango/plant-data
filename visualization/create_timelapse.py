@@ -12,37 +12,6 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def get_agent_name(experiment, zone):
-    if experiment in [11, 12]:
-        return "Uniform_Discrete"
-    elif experiment == 13:
-        return "Uniform_Dirichlet"
-    elif experiment == 14:
-        mapping = {
-            1: "Constant_White",
-            2: "InAC_Data_Det",
-            3: "InAC_Data_Sto",
-            4: "InAC_Data_Sto",
-            5: "InAC_Data_Sto",
-            6: "InAC_Data_Sto",
-            8: "InAC_GP_Det_Opt0",
-            9: "InAC_GP_Det_Opt0.25",
-            10: "InAC_GP_Det_Opt0.5",
-            11: "InAC_GP_Det_Opt0.75",
-            12: "InAC_GP_Det_Opt1",
-        }
-        return mapping.get(zone, f"Other_E14_Z{zone}")
-    elif experiment == 15:
-        mapping = {
-            2: "InAC_GP2",
-            3: "InAC_3",
-            4: "InAC_4",
-        }
-        return mapping.get(zone, f"Other_E15_Z{zone}")
-    else:
-        return f"Exp_{experiment}_Zone_{zone}"
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Create a timelapse from plant dataset."
@@ -92,6 +61,7 @@ def main():
         .agg(
             [
                 pl.col("image_path").first(),
+                pl.col("agent").first(),
                 pl.col("area").mean().alias("mean_area"),
                 pl.col("clean_area").mean().alias("mean_clean_area"),
                 pl.col("reward").mean().alias("mean_reward"),
@@ -103,8 +73,6 @@ def main():
         .sort("wall_time")
         .with_columns(pl.col("mean_reward").cum_sum().alias("mean_return"))
     )
-
-    agent_name = get_agent_name(args.experiment, args.zone)
 
     tmp_dir = Path(f"/tmp/timelapse_E{args.experiment}_Z{args.zone}")
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -136,6 +104,7 @@ def main():
 
     for i, row in enumerate(tqdm(agg_df.iter_rows(named=True), total=len(agg_df))):
         orig_img_path = row["image_path"]
+        agent_name = row["agent"]
         wall_time = row["wall_time"]
         mean_area = row["mean_area"]
         mean_clean_area = row["mean_clean_area"]
