@@ -219,7 +219,7 @@ def process_zone_images(
                 }
                 # Add stats (area, intensity, etc.)
                 for k, v in stats.items():
-                    if k != "warped_image":
+                    if k not in ["warped_image", "plant_id"]:
                         res_row[k] = v
                 return res_row
 
