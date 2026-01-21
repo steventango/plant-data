@@ -42,11 +42,13 @@ EXPERIMENT_EVENTS = {
         "num_pots_per_tray": 20,
     },
     11: {
-        # missing data
+        "sterilized_date": date(2025, 8, 5),
+        "plate_date": date(2025, 8, 8),
         "transplant_date": date(2025, 8, 15),
+        "remove_domes_date": date(2025, 8, 18),
         "watering": {
-            # ?
-            date(2025, 8, 15): 2.0,
+            date(2025, 8, 15): 1.0,
+            date(2025, 8, 18): 2.0,
         },
         "num_pots": 18,
         "num_pots_per_tray": 18,
@@ -81,7 +83,6 @@ EXPERIMENT_EVENTS = {
         "remove_domes_date": date(2025, 11, 7),
         "watering": {
             date(2025, 11, 4): 1.0,
-            date(2025, 11, 7): 2.0,
             date(2025, 11, 17): 2.0,
         },
         "num_pots": 64,
