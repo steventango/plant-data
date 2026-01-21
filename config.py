@@ -3,8 +3,8 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 
-VERSION = "v21"
-VISION_VERSION = "v4"
+VERSION = "v22"
+VISION_VERSION = "v5"
 
 GOOD_ZONE_DAYS = {
     "E11/zone1": [1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
