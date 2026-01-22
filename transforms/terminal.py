@@ -58,7 +58,7 @@ def transform_bolted(df: pl.DataFrame) -> pl.DataFrame:
             )
         )
     
-    df.with_columns(pl.Series("bolted_prob", predictions, dtype=pl.Float32))
+    df = df.with_columns(pl.Series("bolted_prob", predictions, dtype=pl.Float32))
     df = df.with_columns(
         ((pl.col("bolted_prob") > 0.5) & (pl.col("wall_time") >= 7.0)).alias("bolted_pred")
     )
