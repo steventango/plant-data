@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 offline_dataset = minari.load_dataset("plant-data/mixed-v22")
 episode_index = 1200
 
-print(offline_dataset.observation_space.shape)
-print(offline_dataset.action_space.shape)
+print(f"Observation space: {offline_dataset.observation_space.shape}")
+print(f"Action space: {offline_dataset.action_space.shape}")
 
-all_states = []
+all_obs = []
 all_actions = []
 all_rewards = []
-all_next_states = []
+all_next_obs = []
 all_terminations = []
 
 for episode in offline_dataset.iterate_episodes():
@@ -22,7 +22,7 @@ for episode in offline_dataset.iterate_episodes():
         # if nan or inf raise
         if np.isnan(observations).any() or np.isinf(observations).any():
             raise ValueError("NaN or inf found in observations")
-        all_states.append(observations)
+        all_obs.append(observations)
 
         actions = episode.actions[t]
         # if nan or inf raise
@@ -40,13 +40,24 @@ for episode in offline_dataset.iterate_episodes():
         # if nan or inf raise
         if np.isnan(next_observations).any() or np.isinf(next_observations).any():
             raise ValueError("NaN or inf found in next_observations")
-        all_next_states.append(next_observations)
+        all_next_obs.append(next_observations)
 
         terminations = episode.terminations[t]
         if np.isnan(terminations).any() or np.isinf(terminations).any():
             raise ValueError("NaN or inf found in terminations")
         all_terminations.append(terminations)
 
+# numpy stack
+observations = np.stack(all_obs)
+print(f"Observations shape: {observations.shape}")
+actions = np.stack(all_actions)
+print(f"Actions shape: {actions.shape}")
+rewards = np.stack(all_rewards)
+print(f"Rewards shape: {rewards.shape}")
+next_observations = np.stack(all_next_obs)
+print(f"Next observations shape: {next_observations.shape}")
+terminations = np.stack(all_terminations)
+print(f"Terminations shape: {terminations.shape}")
 
 episode = offline_dataset[episode_index]
 print(episode)
