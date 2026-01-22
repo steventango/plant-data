@@ -72,7 +72,7 @@ sns.set_theme(style="darkgrid")
 n_obs_dims = observations.shape[1]
 n_action_dims = actions.shape[1]
 
-fig, axes = plt.subplots(3, 3, figsize=(18, 6))
+fig, axes = plt.subplots(4, 3, figsize=(18, 12))
 axes = axes.flatten()
 
 # Plot 0: Wall time (dimension 0)
@@ -109,11 +109,52 @@ ax1.set_ylabel("Clean Area")
 ax1.set_title("Observation Dimension 1: Clean Area")
 ax1.grid(True, alpha=0.3)
 
-# Plot 2: Other plant stats (dimensions 2-17)
+# Plot 2: Solidity (dimension 3)
 ax2 = axes[2]
+ax2.plot(
+    timesteps,
+    observations[:, 3],
+    color="brown",
+    linewidth=2,
+    marker="o",
+    markersize=4,
+    drawstyle="steps-post",
+)
+ax2.set_xlabel("Timestep")
+ax2.set_ylabel("Solidity")
+ax2.set_title("Observation Dimension 3: Solidity")
+ax2.grid(True, alpha=0.3)
+
+# Plot 3: LAB Colors (dimensions 24, 19, 17)
+ax3 = axes[3]
+lab_indices = [24, 19, 17]  # L*, a*, b*
+lab_colors = ["black", "magenta", "blue"]
+lab_labels = ["L (Lightness)", "a (Green-Red)", "b (Blue-Yellow)"]
+
+for idx, color, label in zip(lab_indices, lab_colors, lab_labels):
+    ax3.plot(
+        timesteps,
+        observations[:, idx],
+        color=color,
+        label=label,
+        alpha=0.7,
+        linewidth=2,
+        drawstyle="steps-post",
+    )
+ax3.set_xlabel("Timestep")
+ax3.set_ylabel("LAB Values")
+ax3.set_title("Observation Dimensions 24, 19, 17: LAB Color Mean")
+ax3.legend(loc="lower right", fontsize="small")
+ax3.grid(True, alpha=0.3)
+
+# Plot 4: Other plant stats
+ax4 = axes[4]
 action_trace_start = n_obs_dims - 768 - 3
-for i in range(2, action_trace_start):
-    ax2.plot(
+excluded_dims = {0, 1, 3, 17, 19, 24}
+for i in range(action_trace_start):
+    if i in excluded_dims:
+        continue
+    ax4.plot(
         timesteps,
         observations[:, i],
         label=f"Obs {i}",
@@ -121,13 +162,13 @@ for i in range(2, action_trace_start):
         linewidth=1.5,
         drawstyle="steps-post",
     )
-ax2.set_xlabel("Timestep")
-ax2.set_ylabel("Plant Stats Value")
-ax2.set_title(f"Observation Dimensions 2-{action_trace_start-1}: Other Plant Stats")
-ax2.grid(True, alpha=0.3)
+ax4.set_xlabel("Timestep")
+ax4.set_ylabel("Plant Stats Value")
+ax4.set_title(f"Other Observation Dimensions (2-{action_trace_start - 1})")
+ax4.grid(True, alpha=0.3)
 
-# Plot 3: Action traces (dimensions 17-20)
-ax3 = axes[3]
+# Plot 5: Action traces (dimensions 17-20)
+ax5 = axes[5]
 colors_traces = ["red", "grey", "blue"]
 labels_traces = [
     "Action Trace 0 (Red)",
@@ -135,7 +176,7 @@ labels_traces = [
     "Action Trace 2 (Blue)",
 ]
 for i, (color, label) in enumerate(zip(colors_traces, labels_traces)):
-    ax3.plot(
+    ax5.plot(
         timesteps,
         observations[:, action_trace_start + i],
         color=color,
@@ -145,29 +186,31 @@ for i, (color, label) in enumerate(zip(colors_traces, labels_traces)):
         markersize=4,
         drawstyle="steps-post",
     )
-ax3.set_xlabel("Timestep")
-ax3.set_ylabel("Action Trace Value")
-ax3.set_title(f"Observation Dimensions {action_trace_start}-{action_trace_start + 2}: Action Traces")
-ax3.legend(loc="upper right")
-ax3.grid(True, alpha=0.3)
+ax5.set_xlabel("Timestep")
+ax5.set_ylabel("Action Trace Value")
+ax5.set_title(
+    f"Observation Dimensions {action_trace_start}-{action_trace_start + 2}: Action Traces"
+)
+ax5.legend(loc="upper right")
+ax5.grid(True, alpha=0.3)
 
-# Plot 4: Embeddings (last 768 dimensions)
-ax4 = axes[4]
+# Plot 6: Embeddings (last 768 dimensions)
+ax6 = axes[6]
 embedding_start = n_obs_dims - 768
 for i in range(embedding_start, n_obs_dims):
-    ax4.plot(
+    ax6.plot(
         timesteps, observations[:, i], alpha=0.3, linewidth=0.5, drawstyle="steps-post"
     )
-ax4.set_xlabel("Timestep")
-ax4.set_ylabel("Embedding Value")
-ax4.set_title(f"Observation Dimensions {embedding_start}-{n_obs_dims - 1}: Embeddings")
-ax4.grid(True, alpha=0.3)
+ax6.set_xlabel("Timestep")
+ax6.set_ylabel("Embedding Value")
+ax6.set_title(f"Dimensions {embedding_start}-{n_obs_dims - 1}: Embeddings")
+ax6.grid(True, alpha=0.3)
 
-# Plot 5: Action dimensions as area plot (step function)
-ax5 = axes[5]
+# Plot 7: Action dimensions as area plot (step function)
+ax7 = axes[7]
 colors = ["red", "grey", "blue"]
 labels = ["Action 0", "Action 1", "Action 2"]
-ax5.stackplot(
+ax7.stackplot(
     timesteps,
     actions[:, 0],
     actions[:, 1],
@@ -177,15 +220,15 @@ ax5.stackplot(
     alpha=0.7,
     step="post",
 )
-ax5.set_xlabel("Timestep")
-ax5.set_ylabel("Action Value")
-ax5.set_title("Action Dimensions Over Time")
-ax5.legend(loc="upper right")
-ax5.grid(True, alpha=0.3)
+ax7.set_xlabel("Timestep")
+ax7.set_ylabel("Action Value")
+ax7.set_title("Action Dimensions Over Time")
+ax7.legend(loc="upper right")
+ax7.grid(True, alpha=0.3)
 
-# Plot 6: Rewards
-ax6 = axes[6]
-ax6.plot(
+# Plot 8: Rewards
+ax8 = axes[8]
+ax8.plot(
     timesteps,
     rewards,
     color="green",
@@ -194,15 +237,15 @@ ax6.plot(
     markersize=4,
     drawstyle="steps-post",
 )
-ax6.fill_between(timesteps, rewards, alpha=0.3, color="green", step="post")
-ax6.set_xlabel("Timestep")
-ax6.set_ylabel("Reward")
-ax6.set_title("Rewards Over Time")
-ax6.grid(True, alpha=0.3)
+ax8.fill_between(timesteps, rewards, alpha=0.3, color="green", step="post")
+ax8.set_xlabel("Timestep")
+ax8.set_ylabel("Reward")
+ax8.set_title("Rewards Over Time")
+ax8.grid(True, alpha=0.3)
 
-# Plot 7: Terminations
-ax7 = axes[7]
-ax7.plot(
+# Plot 9: Terminations
+ax9 = axes[9]
+ax9.plot(
     timesteps,
     terminations,
     color="red",
@@ -211,16 +254,16 @@ ax7.plot(
     markersize=5,
     drawstyle="steps-post",
 )
-ax7.fill_between(timesteps, terminations, alpha=0.3, color="red", step="post")
-ax7.set_xlabel("Timestep")
-ax7.set_ylabel("Termination")
-ax7.set_title("Terminations Over Time")
-ax7.set_ylim(-0.1, 1.1)
-ax7.grid(True, alpha=0.3)
+ax9.fill_between(timesteps, terminations, alpha=0.3, color="red", step="post")
+ax9.set_xlabel("Timestep")
+ax9.set_ylabel("Termination")
+ax9.set_title("Terminations Over Time")
+ax9.set_ylim(-0.1, 1.1)
+ax9.grid(True, alpha=0.3)
 
-# Plot 8: Truncations
-ax8 = axes[8]
-ax8.plot(
+# Plot 10: Truncations
+ax10 = axes[10]
+ax10.plot(
     timesteps,
     truncations,
     color="darkorange",
@@ -229,12 +272,16 @@ ax8.plot(
     markersize=5,
     drawstyle="steps-post",
 )
-ax8.fill_between(timesteps, truncations, alpha=0.3, color="darkorange", step="post")
-ax8.set_xlabel("Timestep")
-ax8.set_ylabel("Truncation")
-ax8.set_title("Truncations Over Time")
-ax8.set_ylim(-0.1, 1.1)
-ax8.grid(True, alpha=0.3)
+ax10.fill_between(timesteps, truncations, alpha=0.3, color="darkorange", step="post")
+ax10.set_xlabel("Timestep")
+ax10.set_ylabel("Truncation")
+ax10.set_title("Truncations Over Time")
+ax10.set_ylim(-0.1, 1.1)
+ax10.grid(True, alpha=0.3)
+
+# Hide unused axes
+for i in range(11, 12):
+    axes[i].axis("off")
 
 plt.tight_layout()
 plt.savefig("first_episode_analysis.png", dpi=300, bbox_inches="tight")
