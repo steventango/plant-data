@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 offline_dataset = minari.load_dataset("plant-data/mixed-v22")
+episode_index = 1200
 
 print(offline_dataset.observation_space.shape)
 print(offline_dataset.action_space.shape)
@@ -46,8 +47,7 @@ for episode in offline_dataset.iterate_episodes():
             raise ValueError("NaN or inf found in terminations")
         all_terminations.append(terminations)
 
-episode_index = 200
-# episode_index = 1200
+
 episode = offline_dataset[episode_index]
 print(episode)
 for key, value in episode.infos.items():
@@ -284,8 +284,9 @@ for i in range(11, 12):
     axes[i].axis("off")
 
 plt.tight_layout()
-plt.savefig("first_episode_analysis.png", dpi=300, bbox_inches="tight")
-print("\nPlot saved to 'first_episode_analysis.png'")
+path = f"results/episode_{episode_index}_analysis.png"
+plt.savefig(path, dpi=300, bbox_inches="tight")
+print(f"\nPlot saved to {path}")
 print(f"Episode length: {episode_length}")
 print(f"Number of observation dimensions: {n_obs_dims}")
 print(f"Number of action dimensions: {n_action_dims}")
