@@ -126,24 +126,6 @@ def main():
     # Apply outlier detection on full dataset before saving
     df = transform_outlier_detection(df, q1=0.01, q2=0.99)
 
-    df = df.with_columns(
-        pl.col("time")
-        .shift(-1)
-        .over("experiment", "zone", "plant_id")
-        .alias("next_time"),
-    )
-    df = df.with_columns(
-        (
-            (
-                pl.col("next_time").is_null()
-                & ~pl.col("terminal")
-                & (pl.col("wall_time") < 13)
-            )
-            | (pl.col("next_time") != pl.col("time") + pl.duration(days=1))
-        ).alias("truncated")
-    )
-    df = df.drop("next_time")
-
     pl.Config.set_tbl_rows(20)
     print(
         df.filter(

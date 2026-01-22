@@ -37,15 +37,6 @@ def main():
 
     df = df.filter(~pl.col("outlier"))
     df_filtered = df.filter(pl.col("day") < 14)
-    df = df.with_columns(
-        (
-            (pl.col("bolted_pred") > 0.5)
-            | (
-                pl.col("day")
-                == pl.col("day").max().over("experiment", "zone", "plant_id")
-            )
-        ).alias("terminal")
-    )
 
     def create_dataset(df: pl.DataFrame, name: str):
         mock_env = MockEnv(df, stats, COLS)

@@ -125,9 +125,37 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = transform_reward(df)
 
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))
+    if exp_id == 12:
+        # experiment 12: day 9 has is filled with invalid observation
+        df = df.filter(pl.col("wall_time") < 9)
+    df = df.with_columns(
+        pl.col("time")
+        .shift(-1)
+        .over("experiment", "zone", "plant_id")
+        .alias("next_time"),
+        pl.col("time")
+        .shift(-2)
+        .over("experiment", "zone", "plant_id")
+        .alias("next_next_time"),
+    )
+    duration = pl.duration(days=1) if subsampling == "daily" else pl.duration(hours=1)
+    df = df.with_columns(
+        (
+            (
+                pl.col("next_next_time").is_null()
+                & ~pl.col("terminal")
+                & (pl.col("wall_time") < 13)
+            )
+            | (
+                (pl.col("next_time") != pl.col("time") + duration)
+                & pl.col("next_time").is_not_null()
+            )
+        ).alias("truncated")
+    )
+    df = df.drop("next_time", "next_next_time")
     pl.Config.set_tbl_rows(20)
     print(
-        df.filter(pl.col("plant_id") == 1).select(
+        df.filter(pl.col("plant_id") == pl.col("plant_id").first()).select(
             "time",
             "wall_time",
             "clean_area",
@@ -136,15 +164,13 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
             "blue_coef",
             "reward",
             "terminal",
+            "truncated"
         )
     )
     print(
         df.select(
             "time", "mean_clean_area", "red_coef", "white_coef", "blue_coef", "reward"
         ).describe()
-    )
-    df = df.with_columns(
-        (pl.col("time") == df["time"].max()).alias("truncated"),
     )
     print(f"E{exp_id}/zone{zone_id}: day min {df['day'].min()}, max {df['day'].max()}")
 
