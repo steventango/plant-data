@@ -5,8 +5,9 @@ from pathlib import Path
 import polars as pl
 from minari import DataCollector
 
-from config import VERSION, COLS
+from config import COLS, VERSION
 from env import MockEnv
+from transforms import transform_terminal
 from transforms.normalization import load_normalization_stats
 
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +37,8 @@ def main():
     stats = load_normalization_stats(input_dir / f"normalization-stats-{VERSION}.json")
 
     df = df.filter(~pl.col("outlier"))
-    df_filtered = df.filter(pl.col("day") < 14)
+    df_filtered = df.filter(pl.col("day") < 15)
+    df = transform_terminal(df)
 
     def create_dataset(df: pl.DataFrame, name: str):
         mock_env = MockEnv(df, stats, COLS)

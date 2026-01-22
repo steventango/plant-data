@@ -164,14 +164,16 @@ class MockEnv(gym.Env):
         return obs, info
 
     def step(self, action: int | np.ndarray) -> Tuple[Any, float, bool, bool, dict]:
-        self.current_row_index += 1
         row = self.plant_df.slice(self.current_row_index, 1)
-
-        reward = float(row["reward"][0]) if row["reward"][0] is not None else 0.0
         terminal = bool(row["terminal"][0]) if row["terminal"][0] is not None else False
         truncated = (
             bool(row["truncated"][0]) if row["truncated"][0] is not None else False
         )
+
+        self.current_row_index += 1
+        row = self.plant_df.slice(self.current_row_index, 1)
+
+        reward = float(row["reward"][0]) if row["reward"][0] is not None else 0.0
 
         # Check if we've reached the end of this plant's data
         end_of_df = self.current_row_index == self.plant_df.height - 1

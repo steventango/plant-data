@@ -121,7 +121,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = transform_image_embeddings(df, output_dir=output_dir)
 
     df = transform_state(df)
-    df = transform_terminal(df)
+    df = transform_terminal(df, 13)
     df = transform_reward(df)
 
     df = df.with_columns(pl.col("day").is_in(good_days).alias("is_good_day"))

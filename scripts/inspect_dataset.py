@@ -3,6 +3,18 @@ import polars as pl
 df = pl.scan_parquet("/data/plant-rl/offline/v22/mixed-v22.parquet")
 pl.Config.set_tbl_rows(1000)
 pl.Config.set_tbl_cols(20)
+pl.Config.set_fmt_str_lengths(1000)
+
+print(
+    df.filter(
+        (pl.col("bolted_pred") > 0.5)
+        & (pl.col("wall_time") == 7.0)
+    ).select(
+        "wall_time",
+        "image_path",
+        "bolted_pred"
+    ).collect()
+)
 
 print(
     df.filter(
@@ -22,7 +34,7 @@ print(
         "reward",
         "terminal",
         "truncated",
-        "outlier",
+        # "outlier",
     )
     .collect()
 )

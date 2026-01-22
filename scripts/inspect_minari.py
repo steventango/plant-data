@@ -3,7 +3,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-offline_dataset = minari.load_dataset("plant-data/mixed-v20")
+offline_dataset = minari.load_dataset("plant-data/mixed-v22")
 
 print(offline_dataset.observation_space.shape)
 print(offline_dataset.action_space.shape)
@@ -46,10 +46,12 @@ for episode in offline_dataset.iterate_episodes():
             raise ValueError("NaN or inf found in terminations")
         all_terminations.append(terminations)
 
-episode_index = 1300
+episode_index = 200
+# episode_index = 1200
 episode = offline_dataset[episode_index]
 print(episode)
-print({key: value[0] for key, value in episode.infos.items()})
+for key, value in episode.infos.items():
+    print(key, value[0])
 
 # Extract data from the first episode
 episode_length = len(episode.observations) - 1
@@ -61,6 +63,7 @@ actions = episode.actions
 rewards = episode.rewards
 terminations = episode.terminations
 truncations = episode.truncations
+infos = episode.infos
 
 # Set seaborn style
 sns.set_theme(style="darkgrid")
@@ -69,7 +72,8 @@ sns.set_theme(style="darkgrid")
 n_obs_dims = observations.shape[1]
 n_action_dims = actions.shape[1]
 
-fig, axes = plt.subplots(9, 1, figsize=(14, 22))
+fig, axes = plt.subplots(3, 3, figsize=(18, 6))
+axes = axes.flatten()
 
 # Plot 0: Wall time (dimension 0)
 ax0 = axes[0]
@@ -107,7 +111,8 @@ ax1.grid(True, alpha=0.3)
 
 # Plot 2: Other plant stats (dimensions 2-17)
 ax2 = axes[2]
-for i in range(2, 17):
+action_trace_start = n_obs_dims - 768 - 3
+for i in range(2, action_trace_start):
     ax2.plot(
         timesteps,
         observations[:, i],
@@ -118,8 +123,7 @@ for i in range(2, 17):
     )
 ax2.set_xlabel("Timestep")
 ax2.set_ylabel("Plant Stats Value")
-ax2.set_title("Observation Dimensions 2-16: Other Plant Stats")
-ax2.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+ax2.set_title(f"Observation Dimensions 2-{action_trace_start-1}: Other Plant Stats")
 ax2.grid(True, alpha=0.3)
 
 # Plot 3: Action traces (dimensions 17-20)
@@ -133,7 +137,7 @@ labels_traces = [
 for i, (color, label) in enumerate(zip(colors_traces, labels_traces)):
     ax3.plot(
         timesteps,
-        observations[:, 17 + i],
+        observations[:, action_trace_start + i],
         color=color,
         label=label,
         linewidth=2,
@@ -143,7 +147,7 @@ for i, (color, label) in enumerate(zip(colors_traces, labels_traces)):
     )
 ax3.set_xlabel("Timestep")
 ax3.set_ylabel("Action Trace Value")
-ax3.set_title("Observation Dimensions 17-19: Action Traces")
+ax3.set_title(f"Observation Dimensions {action_trace_start}-{action_trace_start + 2}: Action Traces")
 ax3.legend(loc="upper right")
 ax3.grid(True, alpha=0.3)
 
@@ -175,7 +179,7 @@ ax5.stackplot(
 )
 ax5.set_xlabel("Timestep")
 ax5.set_ylabel("Action Value")
-ax5.set_title("Action Dimensions Over Time (First Episode)")
+ax5.set_title("Action Dimensions Over Time")
 ax5.legend(loc="upper right")
 ax5.grid(True, alpha=0.3)
 
@@ -193,7 +197,7 @@ ax6.plot(
 ax6.fill_between(timesteps, rewards, alpha=0.3, color="green", step="post")
 ax6.set_xlabel("Timestep")
 ax6.set_ylabel("Reward")
-ax6.set_title("Rewards Over Time (First Episode)")
+ax6.set_title("Rewards Over Time")
 ax6.grid(True, alpha=0.3)
 
 # Plot 7: Terminations
@@ -210,7 +214,7 @@ ax7.plot(
 ax7.fill_between(timesteps, terminations, alpha=0.3, color="red", step="post")
 ax7.set_xlabel("Timestep")
 ax7.set_ylabel("Termination")
-ax7.set_title("Terminations Over Time (First Episode)")
+ax7.set_title("Terminations Over Time")
 ax7.set_ylim(-0.1, 1.1)
 ax7.grid(True, alpha=0.3)
 
@@ -228,7 +232,7 @@ ax8.plot(
 ax8.fill_between(timesteps, truncations, alpha=0.3, color="darkorange", step="post")
 ax8.set_xlabel("Timestep")
 ax8.set_ylabel("Truncation")
-ax8.set_title("Truncations Over Time (First Episode)")
+ax8.set_title("Truncations Over Time")
 ax8.set_ylim(-0.1, 1.1)
 ax8.grid(True, alpha=0.3)
 
