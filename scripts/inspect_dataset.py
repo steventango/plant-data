@@ -1,6 +1,6 @@
 import polars as pl
 
-df = pl.scan_parquet("/data/plant-rl/offline/v20/mixed-v20.parquet")
+df = pl.scan_parquet("/data/plant-rl/offline/v22/mixed-v22.parquet")
 pl.Config.set_tbl_rows(1000)
 pl.Config.set_tbl_cols(20)
 
@@ -8,9 +8,11 @@ print(
     df.filter(
         (pl.col("experiment") == 14)
         & (pl.col("zone") == 1)
-        & (pl.col("plant_id") == 55)
+        # & (pl.col("plant_id") == 2)
+        & (pl.col("wall_time") == 0.0)
     )
     .select(
+        "plant_id",
         "wall_time",
         "clean_area",
         "clean_solidity",
