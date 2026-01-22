@@ -82,7 +82,7 @@ class MockEnv(gym.Env):
         return np.array([red_coef, white_coef, blue_coef], dtype=np.float32)
 
     def _get_info(self) -> dict[str, Any]:
-        info = {"action": self._get_action()}
+        info = {}        
 
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
             return info
@@ -159,6 +159,7 @@ class MockEnv(gym.Env):
             self.current_row_index = 0
 
         obs = self._get_observation()
+        self.action = self._get_action()
         info = self._get_info()
         return obs, info
 
@@ -186,6 +187,7 @@ class MockEnv(gym.Env):
             self.truncated_row_index = self.current_row_index
 
         obs = self._get_observation()
+        self.action = self._get_action()
         info = self._get_info()
 
         return obs, reward, terminal, truncated, info

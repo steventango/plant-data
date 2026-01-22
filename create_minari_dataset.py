@@ -48,7 +48,7 @@ def main():
             obs, info = env.reset(seed=0)
 
             while not mock_env.done:
-                action = info["action"]
+                action = env.unwrapped.action
                 obs, rew, terminated, truncated, info = env.step(action)
 
                 if terminated or truncated:
