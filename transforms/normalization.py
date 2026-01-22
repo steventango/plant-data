@@ -60,10 +60,10 @@ def compute_normalization_stats(df: pl.DataFrame) -> dict:
 
         col_stats = df.select(
             [
-                pl.col(col).min().alias("min"),
-                pl.col(col).max().alias("max"),
-                pl.col(col).mean().alias("mean"),
-                pl.col(col).std().alias("std"),
+                pl.col(col).fill_nan(None).min().alias("min"),
+                pl.col(col).fill_nan(None).max().alias("max"),
+                pl.col(col).fill_nan(None).mean().alias("mean"),
+                pl.col(col).fill_nan(None).std().alias("std"),
             ]
         ).row(0)
 
