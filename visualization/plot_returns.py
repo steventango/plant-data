@@ -22,8 +22,10 @@ def plot_returns(parquet_path: Path):
     df_day0 = df.filter(pl.col("wall_time") == 0).select(
         ["experiment", "zone", "plant_id", pl.col("clean_area").alias("clean_area_0")]
     )
-    df_day14 = df.filter(pl.col("wall_time") == 14).select(
-        ["experiment", "zone", "plant_id", pl.col("clean_area").alias("clean_area_14")]
+    df_day14 = (
+        df.filter(pl.col("terminal"))
+        .unique(subset=["experiment", "zone", "plant_id"], keep="first")
+        .select(["experiment", "zone", "plant_id", pl.col("clean_area").alias("clean_area_14")])
     )
 
     # Join to get plants that exist on both days
