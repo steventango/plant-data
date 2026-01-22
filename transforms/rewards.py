@@ -25,7 +25,7 @@ def transform_reward(df):
     df = df.drop("initial_clean_area", "prev_clean_area")
     # if bolted, reward = 0
     df = df.with_columns(
-        pl.when(pl.col("bolted_pred") > 0.5)
+        pl.when(pl.col("bolted_pred"))
         .then(0)
         .otherwise(pl.col("reward"))
         .alias("reward")

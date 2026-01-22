@@ -57,14 +57,18 @@ def transform_bolted(df: pl.DataFrame) -> pl.DataFrame:
                 leave=False,
             )
         )
-
-    return df.with_columns(pl.Series("bolted_pred", predictions, dtype=pl.Float32))
+    
+    df.with_columns(pl.Series("bolted_prob", predictions, dtype=pl.Float32))
+    df = df.with_columns(
+        ((pl.col("bolted_prob") > 0.5) & (pl.col("wall_time") >= 7.0)).alias("bolted_pred")
+    )
+    return df
 
 
 def transform_terminal(df: pl.DataFrame, terminal_day: int | None = None) -> pl.DataFrame:
     df = transform_bolted(df)
     df = df.with_columns(
-        ((pl.col("bolted_pred") > 0.5) & (pl.col("wall_time") >= 7.0)).alias("terminal")
+        pl.col("bolted_pred").alias("terminal")
     )
     if terminal_day is not None:
         df = df.with_columns(
