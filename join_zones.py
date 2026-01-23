@@ -10,6 +10,7 @@ from transforms import (
     transform_action_traces,
     transform_outlier_detection,
     transform_pca,
+    transform_umap,
     # transform_reward,
     # transform_state,
 )
@@ -139,6 +140,7 @@ def main():
     )
 
     df = transform_pca(df, K=10, output_path=output_dir / "pca_model.joblib")
+    df = transform_umap(df, K=2, output_path=output_dir / "umap_model.joblib")
 
     # Save to parquet
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -12,6 +12,7 @@ from .rewards import transform_reward
 from .states import transform_state
 from .terminal import transform_terminal
 from .pca import transform_pca
+from .umap import transform_umap
 
 __all__ = [
     "transform_action",
@@ -28,4 +29,5 @@ __all__ = [
     "transform_experiment_attributes",
     "get_agent_name",
     "transform_pca",
+    "transform_umap",
 ]
