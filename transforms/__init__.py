@@ -11,6 +11,7 @@ from .outliers import transform_outlier_detection
 from .rewards import transform_reward
 from .states import transform_state
 from .terminal import transform_terminal
+from .pca import transform_pca
 
 __all__ = [
     "transform_action",
@@ -26,4 +27,5 @@ __all__ = [
     "transform_terminal",
     "transform_experiment_attributes",
     "get_agent_name",
+    "transform_pca",
 ]

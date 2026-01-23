@@ -9,6 +9,7 @@ from config import VERSION, tzinfo
 from transforms import (
     transform_action_traces,
     transform_outlier_detection,
+    transform_pca,
     # transform_reward,
     # transform_state,
 )
@@ -137,6 +138,8 @@ def main():
         )
     )
 
+    df = transform_pca(df, K=10, output_path=output_dir / "pca_model.joblib")
+
     # Save to parquet
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -145,8 +148,6 @@ def main():
     logging.info(f"Saving full dataset to {path}")
     df.write_parquet(path)
 
-    # Compute and save normalization stats for the full dataset
-    logging.info("Computing normalization statistics for full dataset...")
     full_stats = compute_normalization_stats(df)
     full_stats_path = output_dir / f"normalization-stats-{VERSION}.json"
     save_normalization_stats(full_stats, full_stats_path)
