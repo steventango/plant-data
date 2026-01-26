@@ -96,7 +96,6 @@ COLS = [
     "clean_value_frequencies_mean",
     "log_clean_area",
     "days_since_sterilization",
-    "days_since_plate",
     "days_since_transplant",
     "days_since_dome_removal",
     "days_since_watering",
