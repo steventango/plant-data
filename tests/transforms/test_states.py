@@ -94,18 +94,18 @@ def test_transform_watering_features():
     # We need 'experiment' and 'time' columns
     df = pl.DataFrame(
         {
-            "experiment": [9, 9, 9, 9],
+            "experiment": [11, 11, 11, 11],
             "time": [
-                datetime(2025, 5, 22, 12, 0, 0),  # Before first watering (May 23)
-                datetime(2025, 5, 23, 12, 0, 0),  # Day of first watering
-                datetime(2025, 5, 25, 12, 0, 0),  # Between waterings
-                datetime(2025, 5, 27, 12, 0, 0),  # After second watering (May 26)
+                datetime(2025, 8, 14, 12, 0, 0),  # Before first watering (Aug 15)
+                datetime(2025, 8, 15, 12, 0, 0),  # Day of first watering
+                datetime(2025, 8, 17, 12, 0, 0),  # Between waterings
+                datetime(2025, 8, 19, 12, 0, 0),  # After second watering (Aug 18)
             ],
         }
     )
 
-    # E9 watering dates: May 23 (1.0L), May 26 (2.0L)
-    # E9 num_pots_per_tray: 18
+    # E11 watering dates: Aug 15 (1.0L), Aug 18 (2.0L)
+    # E11 num_pots_per_tray: 18
     # liters_per_pot: 1.0/18 ~= 0.055, 2.0/18 ~= 0.111
 
     df_out = transform_watering_features(df)
@@ -118,17 +118,17 @@ def test_transform_watering_features():
     assert df_out["days_since_watering"][0] is None
     assert df_out["liters_per_pot"][0] is None
 
-    # Row 1: May 23 (Day 0 of first watering)
+    # Row 1: Aug 15 (Day 0 of first watering)
     assert df_out["days_since_watering"][1] == 0
-    assert df_out["liters_per_pot"][1] == 1.0 / 18
+    assert pytest.approx(df_out["liters_per_pot"][1]) == 1.0 / 18
 
-    # Row 2: May 25 (2 days since May 23)
+    # Row 2: Aug 17 (2 days since Aug 15)
     assert df_out["days_since_watering"][2] == 2
-    assert df_out["liters_per_pot"][2] == 1.0 / 18
+    assert pytest.approx(df_out["liters_per_pot"][2]) == 1.0 / 18
 
-    # Row 3: May 27 (1 day since May 26)
+    # Row 3: Aug 19 (1 day since Aug 18)
     assert df_out["days_since_watering"][3] == 1
-    assert df_out["liters_per_pot"][3] == 2.0 / 18
+    assert pytest.approx(df_out["liters_per_pot"][3]) == 2.0 / 18
 
 
 def test_transform_watering_features_no_metadata():
