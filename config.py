@@ -67,7 +67,7 @@ BLUE = np.array([69.6875, 29.33653846, 3.36826923, 0.0, 2.60769231, 5.14294872])
 
 COLS = [
     "wall_time",
-    "clean_area",
+    "log_clean_area",
     "clean_convex_hull_area",
     "clean_solidity",
     "clean_perimeter",

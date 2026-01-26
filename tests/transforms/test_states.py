@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 
 import polars as pl
+import pytest
 
 from transforms.states import (
     transform_days_since_events,
@@ -31,6 +32,23 @@ def test_mean_clean_area_computed():
     assert result["mean_clean_area"][1] == 150.0
     assert result["mean_clean_area"][2] == 200.0
     assert result["mean_clean_area"][3] == 200.0
+
+
+def test_log_clean_area_computed():
+    """Test that log_clean_area is computed correctly."""
+    df = pl.DataFrame(
+        {
+            "experiment": [1, 1],
+            "zone": [1, 1],
+            "time": [datetime(2024, 1, 1), datetime(2024, 1, 1, 0, 5)],
+            "clean_area": [0.0, 100.0],
+        }
+    )
+    result = transform_state(df)
+
+    assert "log_clean_area" in result.columns
+    assert result["log_clean_area"][0] == 0.0  # log(1) = 0
+    assert pytest.approx(result["log_clean_area"][1]) == 4.61512051684  # log(101)
 
 
 def test_transform_days_since_events():

@@ -13,29 +13,29 @@ def test_transform_reward_per_plant():
         "zone": [1, 1, 1, 1, 1, 1],
         "plant_id": [0, 0, 0, 1, 1, 1],
         "time": [1, 2, 3, 1, 2, 3],
-        "clean_area": [
-            10.0,
-            12.0,
-            15.0,  # Plant 0
-            20.0,
-            24.0,
-            30.0,  # Plant 1
+        "log_clean_area": [
+            1.0,
+            1.2,
+            1.5,  # Plant 0
+            2.0,
+            2.4,
+            3.0,  # Plant 1
         ],
-        "bolted_pred": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "bolted_pred": [False, False, False, False, False, False],
     }
     df = pl.DataFrame(data)
 
     result = transform_reward(df)
 
-    # Expected rewards:
+    # Expected rewards (diff in log_clean_area):
     # Plant 0:
     #   Step 1: null (no prev)
-    #   Step 2: (12 - 10) / 10 = 0.2
-    #   Step 3: (15 - 12) / 10 = 0.3
+    #   Step 2: 1.2 - 1.0 = 0.2
+    #   Step 3: 1.5 - 1.2 = 0.3
     # Plant 1:
     #   Step 1: null
-    #   Step 2: (24 - 20) / 20 = 0.2
-    #   Step 3: (30 - 24) / 20 = 0.3
+    #   Step 2: 2.4 - 2.0 = 0.4
+    #   Step 3: 3.0 - 2.4 = 0.6
 
     p0_rewards = result.filter(pl.col("plant_id") == 0)["reward"].to_list()
     p1_rewards = result.filter(pl.col("plant_id") == 1)["reward"].to_list()
@@ -45,8 +45,8 @@ def test_transform_reward_per_plant():
     assert pytest.approx(p0_rewards[2]) == 0.3
 
     assert p1_rewards[0] is None
-    assert pytest.approx(p1_rewards[1]) == 0.2
-    assert pytest.approx(p1_rewards[2]) == 0.3
+    assert pytest.approx(p1_rewards[1]) == 0.4
+    assert pytest.approx(p1_rewards[2]) == 0.6
 
 
 def test_transform_reward_bolted():
@@ -55,8 +55,8 @@ def test_transform_reward_bolted():
         "zone": [1, 1],
         "plant_id": [0, 0],
         "time": [1, 2],
-        "clean_area": [10.0, 12.0],
-        "bolted_pred": [0.0, 0.6],  # > 0.5
+        "log_clean_area": [1.0, 1.2],
+        "bolted_pred": [False, True],  # > 0.5
     }
     df = pl.DataFrame(data)
     result = transform_reward(df)

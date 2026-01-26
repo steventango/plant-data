@@ -37,18 +37,18 @@ def subsample(df: pl.DataFrame, type: str = "daily") -> pl.DataFrame:
         # )
         df_daily = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
         df_daily = df_daily.with_columns(
-            pl.col("clean_area")
-            .shift(1)
-            .over("experiment", "zone", "plant_id")
-            .alias("prev_clean_area"),
+            (pl.col("clean_area") + 1).log().alias("log_clean_area")
         )
         df_daily = df_daily.with_columns(
-            (
-                (pl.col("clean_area") - pl.col("prev_clean_area"))
-                / pl.col("prev_clean_area")
-            ).alias("reward"),
+            pl.col("log_clean_area")
+            .shift(1)
+            .over("experiment", "zone", "plant_id")
+            .alias("prev_log_clean_area"),
         )
-        df_daily = df_daily.drop("prev_clean_area")
+        df_daily = df_daily.with_columns(
+            (pl.col("log_clean_area") - pl.col("prev_log_clean_area")).alias("reward"),
+        )
+        df_daily = df_daily.drop("prev_log_clean_area")
         df_daily = transform_action_traces(df_daily)
         df_daily = transform_outlier_detection(df_daily, q1=0.01, q2=0.99)
         df_daily = df_daily.with_columns(

@@ -106,6 +106,15 @@ def transform_watering_features(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
+def transform_log_clean_area(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Calculate log_clean_area = log(clean_area + 1).
+    """
+    if "clean_area" in df.columns:
+        df = df.with_columns((pl.col("clean_area") + 1).log().alias("log_clean_area"))
+    return df
+
+
 def transform_state(df: pl.DataFrame) -> pl.DataFrame:
     """
     Transform state-related columns including clean area computation.
@@ -116,6 +125,8 @@ def transform_state(df: pl.DataFrame) -> pl.DataFrame:
 
     if "clean_area" not in df.columns and "area" in df.columns:
         df = df.with_columns(pl.col("area").alias("clean_area"))
+
+    df = transform_log_clean_area(df)
 
     if "clean_area" in df.columns:
         df = df.with_columns(
