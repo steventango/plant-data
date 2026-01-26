@@ -13,11 +13,11 @@ def transform_reward(df):
         (pl.col("log_clean_area") - pl.col("prev_log_clean_area")).alias("reward"),
     )
     df = df.drop("prev_log_clean_area")
-    # if bolted, reward = 0
     df = df.with_columns(
         pl.when(pl.col("bolted_pred"))
-        .then(0)
+        .then(0.0)
         .otherwise(pl.col("reward"))
+        .fill_null(0.0)
         .alias("reward")
     )
     return df

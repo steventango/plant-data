@@ -104,4 +104,5 @@ COLS = [
     "red_coef_trace_0.9",
     "white_coef_trace_0.9",
     "blue_coef_trace_0.9",
+    "reward",
 ]
