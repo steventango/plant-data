@@ -99,6 +99,15 @@ def compute_normalization_stats(df: pl.DataFrame) -> dict:
             "std": np.std(cls_tokens, axis=0).tolist(),
         }
 
+    if "cls_token_pca" in df.columns:
+        pca_features = np.stack(df["cls_token_pca"].to_list())
+        stats["cls_token_pca"] = {
+            "min": np.min(pca_features, axis=0).tolist(),
+            "max": np.max(pca_features, axis=0).tolist(),
+            "mean": np.mean(pca_features, axis=0).tolist(),
+            "std": np.std(pca_features, axis=0).tolist(),
+        }
+
     logger.info(f"Computed normalization stats for {len(stats)} columns")
     return stats
 

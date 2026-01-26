@@ -3,8 +3,8 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 
-VERSION = "v22"
-VISION_VERSION = "v5"
+VERSION = "v23"
+VISION_VERSION = "v6"
 
 GOOD_ZONE_DAYS = {
     "E11/zone1": [1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
@@ -67,7 +67,7 @@ BLUE = np.array([69.6875, 29.33653846, 3.36826923, 0.0, 2.60769231, 5.14294872])
 
 COLS = [
     "wall_time",
-    "log_clean_area",
+    "clean_area",
     "clean_convex_hull_area",
     "clean_solidity",
     "clean_perimeter",
@@ -94,6 +94,7 @@ COLS = [
     "clean_red_frequencies_mean",
     "clean_saturation_frequencies_mean",
     "clean_value_frequencies_mean",
+    "log_clean_area",
     "red_coef_trace_0.9",
     "white_coef_trace_0.9",
     "blue_coef_trace_0.9",

@@ -34,12 +34,17 @@ class MockEnv(gym.Env):
         self.cols = cols
         self.done = False
         self.embedding_dim = 768
+        self.pca_dim = 10
 
         self.low = np.array(
-            [stats[col]["min"] for col in self.cols] + [-np.inf] * self.embedding_dim
+            [stats[col]["min"] for col in self.cols]
+            + [-np.inf] * self.pca_dim
+            + [-np.inf] * self.embedding_dim
         ).astype(np.float32)
         self.high = np.array(
-            [stats[col]["max"] for col in self.cols] + [np.inf] * self.embedding_dim
+            [stats[col]["max"] for col in self.cols]
+            + [np.inf] * self.pca_dim
+            + [np.inf] * self.embedding_dim
         ).astype(np.float32)
         self.observation_space = spaces.Box(
             low=self.low, high=self.high, dtype=np.float32
@@ -50,22 +55,25 @@ class MockEnv(gym.Env):
     def _get_observation(self) -> Any:
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
             return np.zeros(
-                (len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32
+                (len(self.cols) + self.pca_dim + self.embedding_dim,), dtype=np.float32
             )
 
         row = self.plant_df.slice(self.current_row_index, 1)
         if row.is_empty():
             return np.zeros(
-                (len(self.cols) + 3 + self.embedding_dim,), dtype=np.float32
+                (len(self.cols) + self.pca_dim + self.embedding_dim,), dtype=np.float32
             )
 
         # Get stats
         stats = row[self.cols].to_numpy().flatten()
 
+        # Get PCA features
+        cls_token_pca = row["cls_token_pca"][0]
+
         # Get embedding
         cls_token = row[["cls_token"]].to_numpy().flatten()[0]
 
-        obs = np.concatenate([stats, cls_token], dtype=np.float32)
+        obs = np.concatenate([stats, cls_token_pca, cls_token], dtype=np.float32)
         return obs
 
     def _get_action(self) -> int | np.ndarray:
@@ -82,7 +90,7 @@ class MockEnv(gym.Env):
         return np.array([red_coef, white_coef, blue_coef], dtype=np.float32)
 
     def _get_info(self) -> dict[str, Any]:
-        info = {}        
+        info = {}
 
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
             return info
