@@ -6,22 +6,15 @@ pl.Config.set_tbl_cols(20)
 pl.Config.set_fmt_str_lengths(1000)
 
 print(
-    df.filter(
-        (pl.col("bolted_pred") > 0.5)
-        & (pl.col("wall_time") == 7.0)
-    ).select(
-        "wall_time",
-        "image_path",
-        "bolted_pred"
-    ).collect()
+    df.filter((pl.col("bolted_pred") > 0.5) & (pl.col("wall_time") == 7.0))
+    .select("wall_time", "image_path", "bolted_pred")
+    .collect()
 )
 
 print(
     df.filter(
-        (pl.col("experiment") == 14)
-        & (pl.col("zone") == 1)
-        # & (pl.col("plant_id") == 2)
-        & (pl.col("wall_time") == 0.0)
+        (pl.col("experiment") == 14) & (pl.col("zone") == 1) & (pl.col("plant_id") == 2)
+        # & (pl.col("wall_time") == 0.0)
     )
     .select(
         "plant_id",
@@ -36,6 +29,7 @@ print(
         "truncated",
         # "outlier",
     )
+    .select("wall_time", "reward")
     .collect()
 )
 

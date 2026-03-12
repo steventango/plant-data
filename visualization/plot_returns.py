@@ -18,14 +18,16 @@ def plot_returns(parquet_path: Path):
     df = pl.read_parquet(parquet_path)
 
     print("Processing data...")
+    # filter for experiment 16
+    df = df.filter(pl.col("experiment") == 16)
     # Filter for day 0 and day 14
     df_day0 = df.filter(pl.col("wall_time") == 0).select(
-        ["experiment", "zone", "plant_id", pl.col("clean_area").alias("clean_area_0")]
+        ["experiment", "zone", "plant_id", pl.col("log_clean_area").alias("clean_area_0")]
     )
     df_day14 = (
         df.filter(pl.col("terminal"))
         .unique(subset=["experiment", "zone", "plant_id"], keep="first")
-        .select(["experiment", "zone", "plant_id", pl.col("clean_area").alias("clean_area_14")])
+        .select(["experiment", "zone", "plant_id", pl.col("log_clean_area").alias("clean_area_14")])
     )
 
     # Join to get plants that exist on both days
@@ -45,10 +47,10 @@ def plot_returns(parquet_path: Path):
             f"Filtered {initial_count - df_returns.height} plants with zero/small initial area."
         )
 
-    # Calculate return: (day 14 - day 0) / day 0
+    # Calculate return: day 14 - day 0
     df_returns = df_returns.with_columns(
         (
-            (pl.col("clean_area_14") - pl.col("clean_area_0")) / pl.col("clean_area_0")
+            (pl.col("clean_area_14") - pl.col("clean_area_0"))
         ).alias("return")
     )
 
@@ -119,9 +121,9 @@ def plot_returns(parquet_path: Path):
     )
 
     plt.xticks(rotation=45, ha="right")
-    plt.title(f"Violin Plot of Returns by Agent (Version {VERSION})")
+    plt.title("Violin Plot of Returns by Agent")
     plt.xlabel("Agent")
-    plt.ylabel("Return: (Day 14 Area - Day 0 Area) / Day 0 Area")
+    plt.ylabel("Return")
 
     plt.tight_layout()
     output_path = "return_violinplot_by_agent.png"

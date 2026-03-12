@@ -114,7 +114,7 @@ def main():
         logging.info(f"Plotting IQM plant area per {group_label} (all experiments)")
 
         if args.group_by_agent:
-            df_plot = df.with_columns(pl.col("agent_name").alias("group_key"))
+            df_plot = df.with_columns(pl.col("agent").alias("group_key"))
         else:
             # Create a combined experiment-zone identifier
             df_plot = df.with_columns(

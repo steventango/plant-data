@@ -27,8 +27,8 @@ def load_image(path, target_size=(64, 64)):
 
 def main():
     # Paths
-    input_path = "/data/plant-rl/offline/v22/mixed-v22.parquet"
-    pca_model_path = "/data/plant-rl/offline/v22/pca_model.joblib"
+    input_path = "/data/plant-rl/offline/v23/mixed-v23.parquet"
+    pca_model_path = "/data/plant-rl/offline/v23/pca_model.joblib"
     output_dir = "results/pca_scatter"
     os.makedirs(output_dir, exist_ok=True)
 
