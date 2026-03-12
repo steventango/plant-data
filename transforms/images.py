@@ -254,7 +254,7 @@ def process_zone_images(
         except Exception as e:
             logger.error(f"Failed to process frame {i} for E{experiment}/Z{zone}: {e}")
             # Reset state on failure to force a new /detect on next frame
-            pot_state = None
+            state = None
 
     logger.info(
         f"E{experiment}/zone{zone}: Processed {len(images_to_process)} images in {time.time() - t_start:.2f}s"
