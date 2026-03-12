@@ -90,15 +90,6 @@ def compute_normalization_stats(df: pl.DataFrame) -> dict:
                 "std": 1.0,
             }
 
-    if "cls_token" in df.columns:
-        cls_tokens = np.stack(df["cls_token"].to_numpy())
-        stats["cls_token"] = {
-            "min": np.min(cls_tokens, axis=0).tolist(),
-            "max": np.max(cls_tokens, axis=0).tolist(),
-            "mean": np.mean(cls_tokens, axis=0).tolist(),
-            "std": np.std(cls_tokens, axis=0).tolist(),
-        }
-
     if "cls_token_pca" in df.columns:
         pca_features = np.stack(df["cls_token_pca"].to_list())
         stats["cls_token_pca"] = {
@@ -106,6 +97,15 @@ def compute_normalization_stats(df: pl.DataFrame) -> dict:
             "max": np.max(pca_features, axis=0).tolist(),
             "mean": np.mean(pca_features, axis=0).tolist(),
             "std": np.std(pca_features, axis=0).tolist(),
+        }
+
+    if "cls_token" in df.columns:
+        cls_tokens = np.stack(df["cls_token"].to_numpy())
+        stats["cls_token"] = {
+            "min": np.min(cls_tokens, axis=0).tolist(),
+            "max": np.max(cls_tokens, axis=0).tolist(),
+            "mean": np.mean(cls_tokens, axis=0).tolist(),
+            "std": np.std(cls_tokens, axis=0).tolist(),
         }
 
     logger.info(f"Computed normalization stats for {len(stats)} columns")
