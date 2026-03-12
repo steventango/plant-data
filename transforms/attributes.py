@@ -100,6 +100,27 @@ EXPERIMENT_EVENTS = {
         "num_pots": 64,
         "num_pots_per_tray": 32,
     },
+    16: {
+        "sterilized_date": date(2026, 1, 19),
+        "plate_date": date(2026, 1, 23),
+        "transplant_date": date(2026, 1, 30),
+        "remove_domes_date": date(2026, 2, 2),
+        "watering": {
+            date(2026, 1, 30): 1.0,
+            date(2026, 2, 2): 0.25,
+            date(2026, 2, 5): 0.5,
+            date(2026, 2, 6): 0.25,
+            date(2026, 2, 8): 0.25,
+            date(2026, 2, 9): 0.5,
+            date(2026, 2, 11): 0.5,
+            date(2026, 2, 13): 0.25,
+            date(2026, 2, 15): 0.5,
+            date(2026, 2, 17): 0.25,
+            date(2026, 2, 19): 0.25,
+        },
+        "num_pots": 36,
+        "num_pots_per_tray": 18,
+    },
 }
 
 
@@ -140,6 +161,18 @@ def get_agent_name(df: pl.DataFrame) -> pl.DataFrame:
             .then(pl.lit("InAC_3"))
             .when(pl.col("zone") == 4)
             .then(pl.lit("InAC_4"))
+            .otherwise(pl.lit("Other"))
+        )
+        .when(pl.col("experiment") == 16)
+        .then(
+            pl.when(pl.col("zone").is_in([1, 5, 9]))
+            .then(pl.lit("Constant_White"))
+            .when(pl.col("zone").is_in([3, 7, 12]))
+            .then(pl.lit("InAC_Seed6"))
+            .when(pl.col("zone").is_in([2, 6, 11]))
+            .then(pl.lit("InAC_Seed7"))
+            .when(pl.col("zone").is_in([4, 8, 10]))
+            .then(pl.lit("InAC_Seed21"))
             .otherwise(pl.lit("Other"))
         )
         .otherwise(pl.lit("Other"))
