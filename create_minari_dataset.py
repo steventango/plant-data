@@ -68,7 +68,7 @@ def main():
         print(f"Dataset created: {dataset.id}")
 
     gkf = GroupKFold(n_splits=5)
-    groups_df = df_filtered.select(["experiment", "zone"]).with_columns(
+    groups_df = df.select(["experiment", "zone"]).with_columns(
         pl.concat_str([pl.col("experiment"), pl.col("zone")], separator="-").alias(
             "group"
         )
@@ -76,14 +76,14 @@ def main():
     groups = groups_df["group"].to_numpy()
 
     logging.info("Generating GroupKFold datasets...")
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(df_filtered, groups=groups)):
+    for fold, (train_idx, val_idx) in enumerate(gkf.split(df, groups=groups)):
         logging.info(f"Processing Fold {fold}...")
 
-        df_train = df_filtered[train_idx]
-        df_val = df_filtered[val_idx]
+        df_train = df[train_idx]
+        df_val = df[val_idx]
 
-        create_dataset(df_train, f"mixed-fold{fold}-train")
-        create_dataset(df_val, f"mixed-fold{fold}-val")
+        create_dataset(df_train, f"mixed-all-fold{fold}-train")
+        create_dataset(df_val, f"mixed-all-fold{fold}-val")
 
     create_dataset(df_filtered, "mixed")
     create_dataset(df, "mixed-all")
