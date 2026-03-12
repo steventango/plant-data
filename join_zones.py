@@ -5,7 +5,7 @@ from pathlib import Path
 
 import polars as pl
 
-from config import VERSION, tzinfo
+from config import VERSION, TIMEZONE, tzinfo
 from transforms import (
     transform_action_traces,
     transform_outlier_detection,
@@ -108,14 +108,15 @@ def main():
         # TODO: fix later drop all columns starting with agent_state
         lf = lf.drop(
             [col for col in lf.columns if col.startswith("agent_state")]
-            + ["patch_features"]
-            if "patch_features" in lf.columns
-            else []
+            + (["patch_features"] if "patch_features" in lf.columns else [])
         )
 
         # Make image_path absolute and point to segment images
         prefix = str(file.parent)
-        lf = lf.with_columns((prefix + "/" + pl.col("image_path")).alias("image_path"))
+        lf = lf.with_columns(
+            (prefix + "/" + pl.col("image_path")).alias("image_path"),
+            pl.col("time").dt.convert_time_zone(TIMEZONE),
+        )
 
         lazy_frames.append(lf)
 

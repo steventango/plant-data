@@ -1,19 +1,22 @@
-import logging
 import argparse
+import json
+import logging
 import re
 from datetime import datetime, time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import polars as pl
-from config import GOOD_ZONE_DAYS, TIMEZONE, tzinfo, VERSION
+
+from config import GOOD_ZONE_DAYS, TIMEZONE, VERSION
 from transforms import (
     transform_action,
     transform_action_traces,
+    transform_experiment_attributes,
     transform_image_embeddings,
     transform_reward,
     transform_state,
     transform_terminal,
-    transform_experiment_attributes,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -27,11 +30,16 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     raw_csv_path = Path(data_path) / "raw.csv"
     if raw_csv_path.exists():
         raw_csv_paths.append(raw_csv_path)
-    if not raw_csv_paths:
-        logging.error(f"raw.csv not found in {data_path}")
-        return None
+    config_path = Path(data_path) / "config.json"
+    local_tz = TIMEZONE
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            config = json.load(f)
+            local_tz = config.get("timezone", TIMEZONE)
 
-    # open all and join
+    local_tzinfo = ZoneInfo(local_tz)
+    logging.info(f"Using timezone {local_tz}")
+
     dfs = [
         pl.read_csv(
             path,
@@ -52,7 +60,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     ]
     df = pl.concat(dfs, how="diagonal_relaxed")
     df = df.unique(subset=["time"])
-    df = df.with_columns(pl.col("time").dt.convert_time_zone(TIMEZONE))
+    df = df.with_columns(pl.col("time").dt.convert_time_zone(local_tz))
     df = df.with_columns(
         pl.col("time").dt.replace(second=0, microsecond=0, ambiguous="earliest")
     )
@@ -68,7 +76,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     df = df.filter(
         pl.col("time")
         .dt.time()
-        .is_between(time(9, tzinfo=tzinfo), time(21, tzinfo=tzinfo))
+        .is_between(time(9, tzinfo=local_tzinfo), time(21, tzinfo=local_tzinfo))
     )
     df = df.sort("time")
     print(
@@ -92,8 +100,8 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     )
     df = transform_action(df)
     df = df.filter(
-        (pl.col("time").dt.time() >= time(9, 30, tzinfo=tzinfo))
-        & (pl.col("time").dt.time() < time(20, 30, tzinfo=tzinfo))
+        (pl.col("time").dt.time() >= time(9, 30, tzinfo=local_tzinfo))
+        & (pl.col("time").dt.time() < time(20, 30, tzinfo=local_tzinfo))
     )
     # transform action by averaging over the day between 9:30 and 20:30
     df = df.with_columns(
@@ -107,7 +115,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
     subsampling = "daily"
     if subsampling == "daily":
         # daily subsampling
-        df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=tzinfo))
+        df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=local_tzinfo))
     elif subsampling == "hourly":
         # hourly subsampling
         df = df.filter(pl.col("time").dt.minute() == 30)
@@ -164,7 +172,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
             "blue_coef",
             "reward",
             "terminal",
-            "truncated"
+            "truncated",
         )
     )
     print(
