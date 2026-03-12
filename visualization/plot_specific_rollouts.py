@@ -1,11 +1,9 @@
 import argparse
 import logging
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import minari
-import numpy as np
 import seaborn as sns
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

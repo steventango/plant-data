@@ -164,7 +164,7 @@ def analyze_bolting(parquet_path: Path):
         pdf[pdf["agent"] == a]["days_until_bolting"] for a in pdf["agent"].unique()
     ]
     stat_levene, p_levene = stats.levene(*groups_policy)
-    print(f"\n--- Levene's Test (across policies) ---")
+    print("\n--- Levene's Test (across policies) ---")
     print(f"  Statistic={stat_levene:.4f}, p={p_levene:.4f}")
     if p_levene < 0.05:
         print("  → Unequal variances detected. Welch's ANOVA is appropriate.")
@@ -176,7 +176,7 @@ def analyze_bolting(parquet_path: Path):
         pdf[pdf["zone"] == z]["days_until_bolting"] for z in pdf["zone"].unique()
     ]
     stat_levene_z, p_levene_z = stats.levene(*groups_zone)
-    print(f"\n--- Levene's Test (across zones) ---")
+    print("\n--- Levene's Test (across zones) ---")
     print(f"  Statistic={stat_levene_z:.4f}, p={p_levene_z:.4f}")
 
     # --- One-Way Analysis: Policy Effect ---

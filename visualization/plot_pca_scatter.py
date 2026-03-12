@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from PIL import Image
 import os
-from pathlib import Path
 import logging
 from umap import UMAP
 

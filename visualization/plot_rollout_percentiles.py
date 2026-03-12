@@ -1,11 +1,9 @@
 import minari
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 from PIL import Image
 import argparse
-import os
 from tqdm import tqdm
 
 

@@ -19,7 +19,6 @@ import polars as pl
 from scipy import stats as sp_stats
 
 from config import VERSION
-from transforms.attributes import get_agent_name
 
 # ── Configurable paths ──────────────────────────────────────────────────────
 PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")

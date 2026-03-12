@@ -34,7 +34,7 @@ def main():
     color = "tab:blue"
     ax1.set_xlabel("Principal Component")
     ax1.set_ylabel("Explained Variance Ratio", color=color)
-    bars = ax1.bar(
+    ax1.bar(
         range(1, num_components + 1),
         variance_ratio,
         color=color,
@@ -48,7 +48,7 @@ def main():
     ax2 = ax1.twinx()
     color = "tab:red"
     ax2.set_ylabel("Cumulative Explained Variance", color=color)
-    line = ax2.plot(
+    ax2.plot(
         range(1, num_components + 1),
         cumulative_variance,
         color=color,
