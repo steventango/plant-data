@@ -31,8 +31,14 @@ def load_e16_episode_metrics(path: Path) -> pd.DataFrame:
     df = pl.read_parquet(
         path,
         columns=[
-            "experiment", "zone", "plant_id", "wall_time",
-            "clean_area", "log_clean_area", "reward", "agent",
+            "experiment",
+            "zone",
+            "plant_id",
+            "wall_time",
+            "clean_area",
+            "log_clean_area",
+            "reward",
+            "agent",
         ],
     )
     df = df.filter(pl.col("experiment") == 16)
@@ -41,10 +47,7 @@ def load_e16_episode_metrics(path: Path) -> pd.DataFrame:
     # Truncate to first 14 timesteps (days 0–13 → 13 rewards) per episode
     MAX_REWARDS = 13
     df = df.with_columns(
-        pl.col("wall_time")
-        .rank("ordinal")
-        .over("zone", "plant_id")
-        .alias("_step"),
+        pl.col("wall_time").rank("ordinal").over("zone", "plant_id").alias("_step"),
     )
     df = df.filter(pl.col("_step") <= MAX_REWARDS + 1)  # keep day 0..13
 
@@ -56,9 +59,14 @@ def load_e16_episode_metrics(path: Path) -> pd.DataFrame:
     )
 
     episodes = episodes.with_columns(
-        ((pl.col("final_area") - pl.col("initial_area")) / pl.col("initial_area") * 100)
-        .alias("pct_area_change"),
-        ((pl.col("final_area") - pl.col("initial_area")) / 100).alias("abs_area_change"),
+        (
+            (pl.col("final_area") - pl.col("initial_area"))
+            / pl.col("initial_area")
+            * 100
+        ).alias("pct_area_change"),
+        ((pl.col("final_area") - pl.col("initial_area")) / 100).alias(
+            "abs_area_change"
+        ),
     )
 
     # Drop rows with zero initial area (division issues)
@@ -126,18 +134,18 @@ def sig_label(p: float) -> str:
 AGENT_ORDER = ["Constant_White", "InAC_Seed6", "InAC_Seed7", "InAC_Seed21"]
 ZONE_MAP = {
     "Constant_White": [1, 5, 9],
-    "InAC_Seed6":     [3, 7, 12],
-    "InAC_Seed7":     [2, 6, 11],
-    "InAC_Seed21":    [4, 8, 10],
+    "InAC_Seed6": [3, 7, 12],
+    "InAC_Seed7": [2, 6, 11],
+    "InAC_Seed21": [4, 8, 10],
 }
 
 # Base hues per agent; three lightness shades per agent for its zones
 _BASE = ["#4e9ac7", "#e85c4a", "#6fbf3e", "#a050b0"]
 _SHADES = [
-    ["#a8d4ef", "#4e9ac7", "#1e6a96"],   # blues
-    ["#f4a99e", "#e85c4a", "#b52c1e"],   # reds
-    ["#b5e089", "#6fbf3e", "#3a8a1a"],   # greens
-    ["#d9a8e8", "#a050b0", "#6a2080"],   # purples
+    ["#a8d4ef", "#4e9ac7", "#1e6a96"],  # blues
+    ["#f4a99e", "#e85c4a", "#b52c1e"],  # reds
+    ["#b5e089", "#6fbf3e", "#3a8a1a"],  # greens
+    ["#d9a8e8", "#a050b0", "#6a2080"],  # purples
 ]
 AGENT_COLORS = dict(zip(AGENT_ORDER, _BASE))
 # zone → shade colour
@@ -152,6 +160,7 @@ AGENT_BG = dict(zip(AGENT_ORDER, ["#eaf4fb", "#fdecea", "#eef9e6", "#f5eafb"]))
 _ZONE_STEP = 0.32
 _GROUP_GAP = 0.55
 
+
 def _zone_positions() -> dict[int, float]:
     """Return x-position for each zone."""
     pos: dict[int, float] = {}
@@ -162,11 +171,13 @@ def _zone_positions() -> dict[int, float]:
         x += 3 * _ZONE_STEP + _GROUP_GAP
     return pos
 
+
 def _agent_center(zone_pos: dict[int, float], agent: str) -> float:
     return np.mean([zone_pos[z] for z in ZONE_MAP[agent]])
 
+
 METRICS = [
-    ("return",          "Return (Σ reward, days 0–13)"),
+    ("return", "Return (Σ reward, days 0–13)"),
     ("pct_area_change", "Area Change (%)"),
     ("abs_area_change", "Final − Initial Area (cm²)"),
 ]
@@ -217,10 +228,13 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
             rng = np.random.default_rng(z + 42)
             jitter = rng.uniform(-_ZONE_STEP * 0.32, _ZONE_STEP * 0.32, size=len(vals))
             ax.scatter(
-                zone_pos[z] + jitter, vals,
-                s=9, alpha=0.5,
+                zone_pos[z] + jitter,
+                vals,
+                s=9,
+                alpha=0.5,
                 color=ZONE_COLORS[z],
-                edgecolors="white", linewidths=0.2,
+                edgecolors="white",
+                linewidths=0.2,
                 zorder=3,
             )
 
@@ -231,11 +245,16 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
                 continue
             mean, lo, hi = bootstrap_ci(vals, seed=z)
             ax.errorbar(
-                zone_pos[z], mean,
+                zone_pos[z],
+                mean,
                 yerr=[[mean - lo], [hi - mean]],
-                fmt="_", color="black",
-                markersize=8, markeredgewidth=1.8,
-                elinewidth=1.5, capsize=4, capthick=1.5,
+                fmt="_",
+                color="black",
+                markersize=8,
+                markeredgewidth=1.8,
+                elinewidth=1.5,
+                capsize=4,
+                capthick=1.5,
                 zorder=6,
             )
 
@@ -259,10 +278,23 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
                 xi, xj = zone_pos[za], zone_pos[zb]
                 y = bracket_ceil + k_within * bracket_step
                 tip = bracket_step * 0.18
-                ax.plot([xi, xi, xj, xj], [y, y + tip, y + tip, y],
-                        lw=0.8, color="0.35", zorder=7)
-                ax.text((xi + xj) / 2, y + tip * 1.1, sig_label(p),
-                        ha="center", va="bottom", fontsize=7, color="0.35", zorder=7)
+                ax.plot(
+                    [xi, xi, xj, xj],
+                    [y, y + tip, y + tip, y],
+                    lw=0.8,
+                    color="0.35",
+                    zorder=7,
+                )
+                ax.text(
+                    (xi + xj) / 2,
+                    y + tip * 1.1,
+                    sig_label(p),
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    color="0.35",
+                    zorder=7,
+                )
                 k_within += 1
 
         # ── Between-agent brackets (agent effect) ──────────────────────
@@ -282,11 +314,24 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
             xj = _agent_center(zone_pos, ab)
             y = between_y0 + k_a * bracket_step * 1.1
             tip = bracket_step * 0.22
-            ax.plot([xi, xi, xj, xj], [y, y + tip, y + tip, y],
-                    lw=1.1, color="0.15", zorder=7)
-            ax.text((xi + xj) / 2, y + tip * 1.1, sig_label(p),
-                    ha="center", va="bottom", fontsize=8, fontweight="bold",
-                    color="0.15", zorder=7)
+            ax.plot(
+                [xi, xi, xj, xj],
+                [y, y + tip, y + tip, y],
+                lw=1.1,
+                color="0.15",
+                zorder=7,
+            )
+            ax.text(
+                (xi + xj) / 2,
+                y + tip * 1.1,
+                sig_label(p),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                fontweight="bold",
+                color="0.15",
+                zorder=7,
+            )
 
         # ── Agent-level mean + CI ────────────────────────────────────
         for ag in AGENT_ORDER:
@@ -296,26 +341,40 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
             mean, lo, hi = bootstrap_ci(vals, seed=hash(ag) % 1000)
             cx = _agent_center(zone_pos, ag)
             ax.errorbar(
-                cx, mean,
+                cx,
+                mean,
                 yerr=[[mean - lo], [hi - mean]],
-                fmt="_", color=AGENT_COLORS[ag],
-                markersize=14, markeredgewidth=2.5,
-                elinewidth=2.5, capsize=6, capthick=2.5,
-                alpha=0.85, zorder=5,
+                fmt="_",
+                color=AGENT_COLORS[ag],
+                markersize=14,
+                markeredgewidth=2.5,
+                elinewidth=2.5,
+                capsize=6,
+                capthick=2.5,
+                alpha=0.85,
+                zorder=5,
             )
 
         # ── ANOVA decomposition annotation ─────────────────────────────
-        agent_groups = [pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER]
-        zone_groups  = [pdf.loc[pdf["zone"] == z,  metric].dropna().values for z in all_zones_ordered]
+        agent_groups = [
+            pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER
+        ]
+        zone_groups = [
+            pdf.loc[pdf["zone"] == z, metric].dropna().values for z in all_zones_ordered
+        ]
         F_ag, p_ag = sp_stats.f_oneway(*agent_groups)
         F_zn, p_zn = sp_stats.f_oneway(*zone_groups)
         eta2_ag = anova_eta2(agent_groups)
         eta2_zn = anova_eta2(zone_groups)
         ax.text(
-            0.98, 0.02,
+            0.98,
+            0.02,
             f"Agent: F={F_ag:.2f}, p={p_ag:.3f}, η²={eta2_ag:.3f}\n"
             f"Zone (all 12): F={F_zn:.2f}, p={p_zn:.3f}, η²={eta2_zn:.3f}",
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=7.5,
+            transform=ax.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=7.5,
             color="0.4",
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.85", lw=0.6),
         )
@@ -337,15 +396,21 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
         for ag in AGENT_ORDER:
             cx = _agent_center(zone_pos, ag)
             ax.text(
-                cx, ax.get_ylim()[0] - 0.30 * yrange,
-                ag.replace("_", "\n"), ha="center", va="top",
-                fontsize=7.5, color=AGENT_COLORS[ag], fontweight="bold",
+                cx,
+                ax.get_ylim()[0] - 0.30 * yrange,
+                ag.replace("_", "\n"),
+                ha="center",
+                va="top",
+                fontsize=7.5,
+                color=AGENT_COLORS[ag],
+                fontweight="bold",
                 clip_on=False,
             )
 
     fig.suptitle(
         "Experiment 16 — Agent vs Zone Performance  (days 0–13)",
-        fontsize=13, fontweight="bold",
+        fontsize=13,
+        fontweight="bold",
     )
 
     fig.tight_layout(rect=[0, 0.08, 1, 1])
@@ -357,8 +422,13 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
     # ── Console summary ─────────────────────────────────────────────────
     print("\n══ Statistical decomposition ══")
     for metric, label in METRICS:
-        agent_groups = [pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER]
-        zone_groups  = [pdf.loc[pdf["zone"] == z,  metric].dropna().values for z in sorted(pdf["zone"].unique())]
+        agent_groups = [
+            pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER
+        ]
+        zone_groups = [
+            pdf.loc[pdf["zone"] == z, metric].dropna().values
+            for z in sorted(pdf["zone"].unique())
+        ]
         F_ag, p_ag = sp_stats.f_oneway(*agent_groups)
         F_zn, p_zn = sp_stats.f_oneway(*zone_groups)
         eta2_ag = anova_eta2(agent_groups)
@@ -387,7 +457,9 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
                 pairs_p.append(((za, zb), p))
             adj = holm_bonferroni([p for _, p in pairs_p])
             for ((za, zb), _), p_adj in zip(pairs_p, adj):
-                print(f"  [{ag}] zone {za} vs zone {zb}  p={p_adj:.4f}  {sig_label(p_adj)}")
+                print(
+                    f"  [{ag}] zone {za} vs zone {zb}  p={p_adj:.4f}  {sig_label(p_adj)}"
+                )
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -396,10 +468,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--parquet", type=str, default=str(PARQUET_PATH),
+        "--parquet",
+        type=str,
+        default=str(PARQUET_PATH),
     )
     parser.add_argument(
-        "--output", type=str, default=str(OUTPUT_DIR),
+        "--output",
+        type=str,
+        default=str(OUTPUT_DIR),
     )
     args = parser.parse_args()
 

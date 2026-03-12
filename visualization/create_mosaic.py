@@ -114,7 +114,9 @@ def render_actions_plot(
 
     ax.stackplot(
         wt,
-        r, w, b,
+        r,
+        w,
+        b,
         labels=["Red", "White", "Blue"],
         colors=["#e05050", "#aaaaaa", "#5070e0"],
         alpha=0.85,
@@ -124,7 +126,9 @@ def render_actions_plot(
     for day, ls in ((initial_day, "--"), (final_day, ":")):
         ax.axvline(day, color="black", linewidth=1.0, linestyle=ls, alpha=0.6)
 
-    x_max = max_day if max_day is not None else (wt.max() if len(wt) > 1 else wt.min() + 1)
+    x_max = (
+        max_day if max_day is not None else (wt.max() if len(wt) > 1 else wt.min() + 1)
+    )
     ax.set_xlim(wt.min() if len(wt) > 0 else 0, x_max)
     ax.set_ylim(0, 1)
     ax.set_xlabel("Day", fontsize=8)
@@ -249,9 +253,8 @@ def main():
         )
     )
 
-    zone_summary = (
-        initial_df.join(final_df, on=["experiment", "zone"])
-        .sort(["agent", "experiment", "zone"])
+    zone_summary = initial_df.join(final_df, on=["experiment", "zone"]).sort(
+        ["agent", "experiment", "zone"]
     )
 
     # 2b. Collect per-zone action time series (all days, sorted by wall_time)
@@ -341,7 +344,14 @@ def main():
         if agent != current_agent:
             if current_agent is not None:
                 _draw_agent_label(
-                    draw, current_agent, agent_start_y, y, label_w, font_large, text_color, sep_color
+                    draw,
+                    current_agent,
+                    agent_start_y,
+                    y,
+                    label_w,
+                    font_large,
+                    text_color,
+                    sep_color,
                 )
             current_agent = agent
             agent_start_y = y
@@ -359,14 +369,18 @@ def main():
         # Resolve and draw initial frame
         first_resolved = resolve_image(first_img_path, experiment, zone, first_time)
         if first_resolved:
-            _paste_thumbnail(mosaic, first_resolved, label_w, y, thumb_w, thumb_h, resample)
+            _paste_thumbnail(
+                mosaic, first_resolved, label_w, y, thumb_w, thumb_h, resample
+            )
         else:
             logging.warning(f"No image found for E{experiment}Z{zone} initial frame")
 
         # Resolve and draw final frame
         last_resolved = resolve_image(last_img_path, experiment, zone, last_time)
         if last_resolved:
-            _paste_thumbnail(mosaic, last_resolved, label_w + thumb_w, y, thumb_w, thumb_h, resample)
+            _paste_thumbnail(
+                mosaic, last_resolved, label_w + thumb_w, y, thumb_w, thumb_h, resample
+            )
         else:
             logging.warning(f"No image found for E{experiment}Z{zone} final frame")
 
@@ -411,7 +425,14 @@ def main():
     # Draw last agent group label
     if current_agent is not None:
         _draw_agent_label(
-            draw, current_agent, agent_start_y, y_offset + n_zones * thumb_h, label_w, font_large, text_color, sep_color
+            draw,
+            current_agent,
+            agent_start_y,
+            y_offset + n_zones * thumb_h,
+            label_w,
+            font_large,
+            text_color,
+            sep_color,
         )
 
     # Vertical separators

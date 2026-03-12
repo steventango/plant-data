@@ -36,7 +36,9 @@ class MockEnv(gym.Env):
         self.embedding_dim = 768
         self.pca_dim = 10
         dim = len(cols) + self.pca_dim + self.embedding_dim
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(dim,), dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(dim,), dtype=np.float32
+        )
         # Action space: [red_coef, white_coef, blue_coef]
         self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
 
@@ -62,12 +64,12 @@ class MockEnv(gym.Env):
         cls_token = row[["cls_token"]].to_numpy().flatten()[0]
 
         obs = np.concatenate([stats, cls_token_pca, cls_token], dtype=np.float32)
-        
+
         if np.isnan(obs).any():
             nan_idx = np.where(np.isnan(obs.flatten()))[0]
             cols_with_nans = " ".join([self.cols[i] for i in nan_idx])
             raise ValueError(f"NaN found in observation: {cols_with_nans}")
-        
+
         return obs
 
     def _get_action(self) -> int | np.ndarray:

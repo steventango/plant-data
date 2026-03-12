@@ -58,45 +58,47 @@ def main():
     plt.figure(figsize=(12, 6))
 
     found_episodes = 0
-    
+
     # In these datasets, clean_area is typically observation dimension 1
     # Wall time is typically observation dimension 0
-    
+
     for episode in dataset.iterate_episodes():
         # Check if experiment and zone match
         # infos is a dict of arrays, each array has length of episode
-        if 'experiment' in episode.infos and 'zone' in episode.infos:
+        if "experiment" in episode.infos and "zone" in episode.infos:
             # We assume experiment and zone are constant throughout the episode
-            exp_val = episode.infos['experiment'][0]
-            zone_val = episode.infos['zone'][0]
-            
+            exp_val = episode.infos["experiment"][0]
+            zone_val = episode.infos["zone"][0]
+
             # Convert to int if they are strings or floats
             try:
                 exp_val = int(exp_val)
                 zone_val = int(zone_val)
             except (ValueError, TypeError):
                 # If they are strings like 'E14', handle that
-                if isinstance(exp_val, str) and exp_val.startswith('E'):
+                if isinstance(exp_val, str) and exp_val.startswith("E"):
                     try:
                         exp_val = int(exp_val[1:])
                     except ValueError:
                         pass
-            
+
             if exp_val == args.experiment and zone_val == args.zone:
                 found_episodes += 1
-                
+
                 # Observations: (T+1, D)
                 # Clean area is usually index 1
                 wall_time = episode.observations[:, 0]
                 wall_time_filter = wall_time < 14
                 area = episode.observations[wall_time_filter, 1]
                 wall_time = wall_time[wall_time_filter]
-                
+
                 # Plotting against wall time
                 plt.plot(wall_time, area, alpha=0.6, label=f"Episode {episode.id}")
 
     if found_episodes == 0:
-        logging.warning(f"No episodes found for Experiment {args.experiment}, Zone {args.zone}")
+        logging.warning(
+            f"No episodes found for Experiment {args.experiment}, Zone {args.zone}"
+        )
     else:
         logging.info(f"Found {found_episodes} episodes.")
         plt.title(f"Plant Area for Experiment {args.experiment}, Zone {args.zone}")
@@ -104,11 +106,12 @@ def main():
         plt.ylabel("Clean Area")
         plt.ylim(0, 1250)
         # plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        
+
         filename = f"area_E{args.experiment}_Z{args.zone}.png"
         out_path = out_dir / filename
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         logging.info(f"Saved plot to {out_path}")
+
 
 if __name__ == "__main__":
     main()

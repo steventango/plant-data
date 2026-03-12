@@ -22,12 +22,24 @@ def plot_returns(parquet_path: Path):
     df = df.filter(pl.col("experiment") == 16)
     # Filter for day 0 and day 14
     df_day0 = df.filter(pl.col("wall_time") == 0).select(
-        ["experiment", "zone", "plant_id", pl.col("log_clean_area").alias("clean_area_0")]
+        [
+            "experiment",
+            "zone",
+            "plant_id",
+            pl.col("log_clean_area").alias("clean_area_0"),
+        ]
     )
     df_day14 = (
         df.filter(pl.col("terminal"))
         .unique(subset=["experiment", "zone", "plant_id"], keep="first")
-        .select(["experiment", "zone", "plant_id", pl.col("log_clean_area").alias("clean_area_14")])
+        .select(
+            [
+                "experiment",
+                "zone",
+                "plant_id",
+                pl.col("log_clean_area").alias("clean_area_14"),
+            ]
+        )
     )
 
     # Join to get plants that exist on both days
@@ -49,9 +61,7 @@ def plot_returns(parquet_path: Path):
 
     # Calculate return: day 14 - day 0
     df_returns = df_returns.with_columns(
-        (
-            (pl.col("clean_area_14") - pl.col("clean_area_0"))
-        ).alias("return")
+        (pl.col("clean_area_14") - pl.col("clean_area_0")).alias("return")
     )
 
     # Assign agent names

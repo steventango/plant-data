@@ -8,7 +8,9 @@ df = pl.read_parquet("/data/plant-rl/offline/v23/mixed-v23.parquet")
 
 # Filter out rows after terminal state
 # shift reward forwards by 1 over each plant trajectory
-df_filtered = df.with_columns(pl.col("reward").shift(1).over(["experiment", "zone", "plant_id"]))
+df_filtered = df.with_columns(
+    pl.col("reward").shift(1).over(["experiment", "zone", "plant_id"])
+)
 df_filtered = df_filtered.filter(~pl.col("terminal"))
 
 # Calculate total return for each plant trajectory
@@ -28,6 +30,8 @@ experiment_means = (
 
 print(experiment_means)
 
-print(experiment_means.group_by("experiment").agg(
-    pl.col("mean_total_return").max() - pl.col("mean_total_return").min()
-))
+print(
+    experiment_means.group_by("experiment").agg(
+        pl.col("mean_total_return").max() - pl.col("mean_total_return").min()
+    )
+)
