@@ -476,10 +476,24 @@ if __name__ == "__main__":
         type=str,
         default=str(OUTPUT_DIR),
     )
+    parser.add_argument(
+        "--min-return",
+        type=float,
+        default=None,
+        metavar="R",
+        help="Exclude plants whose total return is less than R (e.g. 2 → exclude return <2).",
+    )
     args = parser.parse_args()
 
     pdf = load_e16_episode_metrics(Path(args.parquet))
     print(f"Loaded {len(pdf)} plant episodes from E16")
+    if args.min_return is not None:
+        before = len(pdf)
+        pdf = pdf.loc[pdf["return"] >= args.min_return].reset_index(drop=True)
+        print(
+            f"Excluded {before - len(pdf)} plants with return <{args.min_return}"
+            f" ({len(pdf)} remain)"
+        )
     print(f"Agents: {sorted(pdf['agent'].unique())}")
     print(f"Zones:  {sorted(pdf['zone'].unique())}")
     draw(pdf, Path(args.output))
