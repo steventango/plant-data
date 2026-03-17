@@ -133,9 +133,9 @@ def sig_label(p: float) -> str:
 AGENT_ORDER = ["Constant_White", "InAC_Seed6", "InAC_Seed7", "InAC_Seed21"]
 ZONE_MAP = {
     "Constant_White": [1, 5, 9],
-    "InAC_Seed6": [3, 7, 12],
-    "InAC_Seed7": [2, 6, 11],
-    "InAC_Seed21": [4, 8, 10],
+    "InAC_Seed6": [3, 7, 11],
+    "InAC_Seed7": [2, 6, 10],
+    "InAC_Seed21": [4, 8, 12],
 }
 
 # Base hues per agent; three lightness shades per agent for its zones

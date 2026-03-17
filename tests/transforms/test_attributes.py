@@ -1,4 +1,5 @@
 import datetime
+
 import polars as pl
 
 from transforms.attributes import get_agent_name, transform_experiment_attributes
@@ -63,3 +64,33 @@ def test_transform_experiment_attributes_with_events():
     assert df_out["sterilized_date"][0] == datetime.date(year, 6, 16)
     # E9 transplant: May 23
     assert df_out["transplant_date"][0] == datetime.date(year, 6, 27)
+
+
+def test_get_agent_name_e16_zone_mapping():
+    df = pl.DataFrame(
+        {
+            "experiment": [16] * 12,
+            "zone": list(range(1, 13)),
+        }
+    )
+
+    df_out = get_agent_name(df).sort("zone")
+
+    expected = {
+        1: "Constant_White",
+        2: "InAC_Seed7",
+        3: "InAC_Seed6",
+        4: "InAC_Seed21",
+        5: "Constant_White",
+        6: "InAC_Seed7",
+        7: "InAC_Seed6",
+        8: "InAC_Seed21",
+        9: "Constant_White",
+        10: "InAC_Seed7",
+        11: "InAC_Seed6",
+        12: "InAC_Seed21",
+    }
+
+    assert {
+        row["zone"]: row["agent"] for row in df_out.select(["zone", "agent"]).to_dicts()
+    } == expected
