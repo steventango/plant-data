@@ -3,7 +3,7 @@ Plot E16 experiment metrics: Return, % Area Change, Final − Initial Area.
 X-axis: all 12 zones grouped by agent — lets us disentangle agent vs zone effects.
 Each zone: overlapping violin, raw jittered points, mean + 95 % bootstrap CI.
 Brackets: within-agent zone pairs (zone effect) and between-agent pairs (agent effect).
-Statistical decomposition: one-way ANOVA for agent and zone-within-agent printed per metric.
+Statistical decomposition: nested Welch's ANOVA (agent, zone-within-agent) printed per metric.
 """
 
 import sys
@@ -110,13 +110,49 @@ def pairwise_tests(pdf: pd.DataFrame, metric: str, group_col: str):
     return list(zip(pairs, adjusted))
 
 
-# ── One-way ANOVA effect size (eta²) ───────────────────────────────────────
-def anova_eta2(groups_data: list[np.ndarray]):
-    grand = np.concatenate(groups_data)
-    grand_mean = grand.mean()
-    ss_between = sum(len(g) * (g.mean() - grand_mean) ** 2 for g in groups_data)
-    ss_total = ((grand - grand_mean) ** 2).sum()
-    return ss_between / ss_total if ss_total > 0 else 0.0
+# ── Nested ANOVA decomposition ────────────────────────────────────────────
+def nested_anova(pdf: pd.DataFrame, metric: str, agent_order, zone_map):
+    """Partition SS_total into SS_agent, SS_zone(agent), SS_residual.
+
+    Returns (ss_agent, ss_zone_within, ss_resid, ss_total,
+             eta2_agent, eta2_zone_within).
+    """
+    vals = pdf[metric].dropna()
+    grand_mean = vals.mean()
+    ss_total = ((vals - grand_mean) ** 2).sum()
+
+    # SS_agent: between-agent
+    ss_agent = 0.0
+    for ag in agent_order:
+        g = pdf.loc[pdf["agent"] == ag, metric].dropna()
+        ss_agent += len(g) * (g.mean() - grand_mean) ** 2
+
+    # SS_zone(agent): between-zone-within-agent
+    ss_zone_within = 0.0
+    for ag in agent_order:
+        agent_mean = pdf.loc[pdf["agent"] == ag, metric].dropna().mean()
+        for z in zone_map[ag]:
+            g = pdf.loc[pdf["zone"] == z, metric].dropna()
+            if len(g) == 0:
+                continue
+            ss_zone_within += len(g) * (g.mean() - agent_mean) ** 2
+
+    ss_resid = ss_total - ss_agent - ss_zone_within
+
+    eta2_agent = ss_agent / ss_total if ss_total > 0 else 0.0
+    eta2_zone_within = ss_zone_within / ss_total if ss_total > 0 else 0.0
+
+    return ss_agent, ss_zone_within, ss_resid, ss_total, eta2_agent, eta2_zone_within
+
+
+# ── Welch's ANOVA (does not assume equal variances) ──────────────────────
+def welch_anova(groups_data: list[np.ndarray]):
+    """Welch's ANOVA via scipy.stats.alexandergovern. Returns (statistic, p)."""
+    groups_data = [g for g in groups_data if len(g) >= 2]
+    if len(groups_data) < 2:
+        return float("nan"), float("nan")
+    result = sp_stats.alexandergovern(*groups_data)
+    return result.statistic, result.pvalue
 
 
 def sig_label(p: float) -> str:
@@ -258,43 +294,44 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
             )
 
         # ── Within-agent brackets (zone effect) ────────────────────────
+        # Collect ALL within-agent pairs globally, then Holm–Bonferroni once
         bracket_ceil = ymax_data + 0.04 * yrange
         bracket_step = 0.055 * yrange
-        k_within = 0
+        all_within_pairs = []  # (za, zb)
+        all_within_pvals = []
         for ag in AGENT_ORDER:
-            zs = ZONE_MAP[ag]
-            within_pairs = list(combinations(zs, 2))
-            pvals_w = []
-            for za, zb in within_pairs:
+            for za, zb in combinations(ZONE_MAP[ag], 2):
                 va = pdf.loc[pdf["zone"] == za, metric].dropna().values
                 vb = pdf.loc[pdf["zone"] == zb, metric].dropna().values
                 _, p = sp_stats.ttest_ind(va, vb, equal_var=False)
-                pvals_w.append(p)
-            adj_w = holm_bonferroni(pvals_w)
-            for (za, zb), p in zip(within_pairs, adj_w):
-                if p >= 0.05:
-                    continue
-                xi, xj = zone_pos[za], zone_pos[zb]
-                y = bracket_ceil + k_within * bracket_step
-                tip = bracket_step * 0.18
-                ax.plot(
-                    [xi, xi, xj, xj],
-                    [y, y + tip, y + tip, y],
-                    lw=0.8,
-                    color="0.35",
-                    zorder=7,
-                )
-                ax.text(
-                    (xi + xj) / 2,
-                    y + tip * 1.1,
-                    sig_label(p),
-                    ha="center",
-                    va="bottom",
-                    fontsize=7,
-                    color="0.35",
-                    zorder=7,
-                )
-                k_within += 1
+                all_within_pairs.append((za, zb))
+                all_within_pvals.append(p)
+        adj_within = holm_bonferroni(all_within_pvals)
+        k_within = 0
+        for (za, zb), p in zip(all_within_pairs, adj_within):
+            if p >= 0.05:
+                continue
+            xi, xj = zone_pos[za], zone_pos[zb]
+            y = bracket_ceil + k_within * bracket_step
+            tip = bracket_step * 0.18
+            ax.plot(
+                [xi, xi, xj, xj],
+                [y, y + tip, y + tip, y],
+                lw=0.8,
+                color="0.35",
+                zorder=7,
+            )
+            ax.text(
+                (xi + xj) / 2,
+                y + tip * 1.1,
+                sig_label(p),
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                color="0.35",
+                zorder=7,
+            )
+            k_within += 1
 
         # ── Between-agent brackets (agent effect) ──────────────────────
         agent_pairs_pvals = []
@@ -354,22 +391,19 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
                 zorder=5,
             )
 
-        # ── ANOVA decomposition annotation ─────────────────────────────
+        # ── Nested ANOVA decomposition annotation ──────────────────────
         agent_groups = [
             pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER
         ]
-        zone_groups = [
-            pdf.loc[pdf["zone"] == z, metric].dropna().values for z in all_zones_ordered
-        ]
-        F_ag, p_ag = sp_stats.f_oneway(*agent_groups)
-        F_zn, p_zn = sp_stats.f_oneway(*zone_groups)
-        eta2_ag = anova_eta2(agent_groups)
-        eta2_zn = anova_eta2(zone_groups)
+        W_ag, p_ag = welch_anova(agent_groups)
+        _, _, _, _, eta2_ag, eta2_zw = nested_anova(
+            pdf, metric, AGENT_ORDER, ZONE_MAP,
+        )
         ax.text(
             0.98,
             0.02,
-            f"Agent: F={F_ag:.2f}, p={p_ag:.3f}, η²={eta2_ag:.3f}\n"
-            f"Zone (all 12): F={F_zn:.2f}, p={p_zn:.3f}, η²={eta2_zn:.3f}",
+            f"Welch Agent: W={W_ag:.2f}, p={p_ag:.3f}, η²={eta2_ag:.3f}\n"
+            f"Zone|Agent: η²={eta2_zw:.3f}",
             transform=ax.transAxes,
             ha="right",
             va="bottom",
@@ -419,23 +453,53 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
     plt.close(fig)
 
     # ── Console summary ─────────────────────────────────────────────────
-    print("\n══ Statistical decomposition ══")
+    print("\n══ Levene's test for homogeneity of variances ══")
     for metric, label in METRICS:
         agent_groups = [
             pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER
         ]
+        all_zones_sorted = sorted(pdf["zone"].unique())
         zone_groups = [
-            pdf.loc[pdf["zone"] == z, metric].dropna().values
-            for z in sorted(pdf["zone"].unique())
+            pdf.loc[pdf["zone"] == z, metric].dropna().values for z in all_zones_sorted
         ]
-        F_ag, p_ag = sp_stats.f_oneway(*agent_groups)
-        F_zn, p_zn = sp_stats.f_oneway(*zone_groups)
-        eta2_ag = anova_eta2(agent_groups)
-        eta2_zn = anova_eta2(zone_groups)
+        L_ag, p_lev_ag = sp_stats.levene(*agent_groups)
+        L_zn, p_lev_zn = sp_stats.levene(*zone_groups)
+        verdict_ag = "VIOLATED" if p_lev_ag < 0.05 else "ok"
+        verdict_zn = "VIOLATED" if p_lev_zn < 0.05 else "ok"
         print(f"\n{label}")
-        print(f"  Agent (4 groups): F={F_ag:.3f}, p={p_ag:.4f}, η²={eta2_ag:.4f}")
-        print(f"  Zone (12 groups): F={F_zn:.3f}, p={p_zn:.4f}, η²={eta2_zn:.4f}")
-        print(f"  → {'Agent' if eta2_ag > eta2_zn else 'Zone'} explains more variance")
+        print(f"  Agent groups:  Levene W={L_ag:.3f}, p={p_lev_ag:.4f}  [{verdict_ag}]")
+        print(f"  Zone groups:   Levene W={L_zn:.3f}, p={p_lev_zn:.4f}  [{verdict_zn}]")
+        # Per-agent within-zone variances
+        for ag in AGENT_ORDER:
+            zs = ZONE_MAP[ag]
+            within_groups = [
+                pdf.loc[pdf["zone"] == z, metric].dropna().values for z in zs
+            ]
+            variances = [g.var(ddof=1) for g in within_groups if len(g) >= 2]
+            if len(within_groups) >= 2:
+                L_w, p_w = sp_stats.levene(*within_groups)
+                v_ag = "VIOLATED" if p_w < 0.05 else "ok"
+                print(
+                    f"    {ag:20s} zone vars={[f'{v:.2f}' for v in variances]}  "
+                    f"Levene W={L_w:.3f}, p={p_w:.4f}  [{v_ag}]"
+                )
+    print("  (Welch's tests used throughout — robust to unequal variances)")
+
+    print("\n══ Nested ANOVA decomposition (Welch) ══")
+    for metric, label in METRICS:
+        agent_groups = [
+            pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in AGENT_ORDER
+        ]
+        W_ag, p_ag = welch_anova(agent_groups)
+        ss_ag, ss_zw, ss_res, ss_tot, eta2_ag, eta2_zw = nested_anova(
+            pdf, metric, AGENT_ORDER, ZONE_MAP,
+        )
+        eta2_res = ss_res / ss_tot if ss_tot > 0 else 0.0
+        print(f"\n{label}")
+        print(f"  Welch Agent (4 groups): W={W_ag:.3f}, p={p_ag:.4f}, η²={eta2_ag:.4f}")
+        print(f"  Zone|Agent (nested):    η²={eta2_zw:.4f}")
+        print(f"  Residual:               η²={eta2_res:.4f}")
+        print(f"  → Agent η²={eta2_ag:.4f}, Zone|Agent η²={eta2_zw:.4f}")
 
     print("\n══ Between-agent pairwise (Holm–Bonferroni) ══")
     for metric, label in METRICS:
@@ -443,22 +507,21 @@ def draw(pdf: pd.DataFrame, output_dir: Path):
         for (a, b), p in pairwise_tests(pdf, metric, "agent"):
             print(f"  {a:20s} vs {b:20s}  p={p:.4f}  {sig_label(p)}")
 
-    print("\n══ Within-agent pairwise by zone ══")
+    print("\n══ Within-agent pairwise by zone (global Holm–Bonferroni) ══")
     for metric, label in METRICS:
         print(f"\n{label}:")
+        all_pairs_info = []  # (agent, za, zb, raw_p)
         for ag in AGENT_ORDER:
-            zs = ZONE_MAP[ag]
-            pairs_p = []
-            for za, zb in combinations(zs, 2):
+            for za, zb in combinations(ZONE_MAP[ag], 2):
                 va = pdf.loc[pdf["zone"] == za, metric].dropna().values
                 vb = pdf.loc[pdf["zone"] == zb, metric].dropna().values
                 _, p = sp_stats.ttest_ind(va, vb, equal_var=False)
-                pairs_p.append(((za, zb), p))
-            adj = holm_bonferroni([p for _, p in pairs_p])
-            for ((za, zb), _), p_adj in zip(pairs_p, adj):
-                print(
-                    f"  [{ag}] zone {za} vs zone {zb}  p={p_adj:.4f}  {sig_label(p_adj)}"
-                )
+                all_pairs_info.append((ag, za, zb, p))
+        adj = holm_bonferroni([p for _, _, _, p in all_pairs_info])
+        for (ag, za, zb, _), p_adj in zip(all_pairs_info, adj):
+            print(
+                f"  [{ag}] zone {za} vs zone {zb}  p={p_adj:.4f}  {sig_label(p_adj)}"
+            )
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -479,7 +542,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--min-return",
         type=float,
-        default=None,
+        default=2.0,
         metavar="R",
         help="Exclude plants whose total return is less than R (e.g. 2 → exclude return <2).",
     )
