@@ -7,6 +7,7 @@ import argparse
 import datetime
 import io
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -21,13 +22,13 @@ matplotlib.use("Agg")
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from config import VERSION
-from transforms.actions import compute_action_coefficients
 from visualization.create_mosaic import load_font
-from visualization.plot_e16_metrics import AGENT_ORDER, ZONE_MAP
+from visualization.plot_e16_metrics import build_layout, load_episode_metrics
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 UTC = datetime.timezone.utc
+IMAGE_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{6})\+0000_(left|right)\.jpg$")
 
 
 def get_zone_info(df: pl.DataFrame, experiment: int) -> dict[int, dict]:
@@ -51,17 +52,54 @@ def get_zone_info(df: pl.DataFrame, experiment: int) -> dict[int, dict]:
     return info
 
 
-def raw_image_path(zone_root: Path, target_utc: datetime.datetime) -> Path:
-    """Construct raw image path for a given UTC time (rounded to 5 min)."""
-    # Round to nearest 5 minutes
-    total_minutes = target_utc.hour * 60 + target_utc.minute
-    rounded = round(total_minutes / 5) * 5
-    h, m = divmod(rounded % (24 * 60), 60)
-    # Handle day overflow from rounding
-    day_offset = rounded // (24 * 60)
-    date = target_utc.date() + datetime.timedelta(days=day_offset)
-    ts = f"{date.strftime('%Y-%m-%d')}T{h:02d}{m:02d}00"
-    return zone_root / "images" / f"{ts}+0000_left.jpg"
+def _round_to_nearest_5min(ts_utc: datetime.datetime) -> datetime.datetime:
+    """Round UTC datetime to the nearest 5-minute boundary."""
+    ts_utc = ts_utc.astimezone(UTC)
+    epoch = int(ts_utc.timestamp())
+    rounded = int(round(epoch / 300.0) * 300)
+    return datetime.datetime.fromtimestamp(rounded, tz=UTC)
+
+
+def build_image_time_index(zone_root: Path) -> dict[datetime.datetime, Path]:
+    """Index raw images by nearest 5-minute UTC timestamp; prefer left if both exist."""
+    img_dir = zone_root / "images"
+    idx: dict[datetime.datetime, Path] = {}
+    if not img_dir.exists():
+        return idx
+
+    for p in sorted(img_dir.glob("*.jpg")):
+        m = IMAGE_TS_RE.match(p.name)
+        if not m:
+            continue
+        ts_raw = datetime.datetime.strptime(m.group(1), "%Y-%m-%dT%H%M%S").replace(
+            tzinfo=UTC
+        )
+        ts_key = _round_to_nearest_5min(ts_raw)
+        side = m.group(2)
+        existing = idx.get(ts_key)
+        if existing is None:
+            idx[ts_key] = p
+        elif side == "left" and existing.name.endswith("_right.jpg"):
+            idx[ts_key] = p
+    return idx
+
+
+def backfilled_image_path(
+    image_idx: dict[datetime.datetime, Path],
+    target_utc: datetime.datetime,
+    max_backfill_minutes: int = 15,
+    step_minutes: int = 5,
+) -> Path | None:
+    """Forward-fill behavior: use latest image at or before target within tolerance."""
+    base = _round_to_nearest_5min(target_utc)
+    max_steps = max_backfill_minutes // step_minutes
+    step = datetime.timedelta(minutes=step_minutes)
+    for k in range(max_steps + 1):
+        candidate = base - k * step
+        path = image_idx.get(candidate)
+        if path is not None:
+            return path
+    return None
 
 
 def paste_thumbnail(
@@ -84,7 +122,9 @@ def paste_thumbnail(
 
 def load_zone_actions(zone_root: Path, ref_time_utc: datetime.datetime) -> tuple[list, list, list, list]:
     """Load raw action coefficients at full 5-min resolution from raw CSVs (vectorized)."""
-    from config import BLUE as BLUE_VEC, RED as RED_VEC, WHITE as WHITE_VEC
+    from config import BLUE as BLUE_VEC
+    from config import RED as RED_VEC
+    from config import WHITE as WHITE_VEC
 
     csv_files = sorted(zone_root.glob("raw_*.csv"))
     if not csv_files:
@@ -227,10 +267,21 @@ def main():
     parser.add_argument("--label-width", type=int, default=160)
     parser.add_argument("--interval", type=float, default=1/3, help="8h = 1/3 days")
     parser.add_argument("--max-day", type=float, default=13.0)
+    parser.add_argument(
+        "--image-backfill-minutes",
+        type=int,
+        default=15,
+        help="Forward-fill image lookup tolerance in minutes (past only).",
+    )
     args = parser.parse_args()
 
     logging.info(f"Reading parquet: {args.parquet}")
     df = pl.read_parquet(args.parquet)
+
+    # Build agent order and zone map from data
+    pdf = load_episode_metrics(Path(args.parquet), args.experiment)
+    agent_order, zone_map, _, _, _ = build_layout(pdf)
+    logging.info(f"Agents: {agent_order}, Zone map: {zone_map}")
 
     zone_info = get_zone_info(df, args.experiment)
     logging.info(f"Found info for zones: {sorted(zone_info)}")
@@ -250,7 +301,7 @@ def main():
     header_h = 40
     strip_w = n_frames * thumb
     zone_row_h = thumb + plot_h
-    n_zones = sum(len(z) for z in ZONE_MAP.values())
+    n_zones = sum(len(z) for z in zone_map.values())
 
     canvas_w = label_w + strip_w
     canvas_h = header_h + n_zones * zone_row_h
@@ -276,8 +327,8 @@ def main():
         draw.line([(x_sep, 0), (x_sep, canvas_h)], fill=sep_color)
 
     row_idx = 0
-    for agent in AGENT_ORDER:
-        zones = ZONE_MAP[agent]
+    for agent in agent_order:
+        zones = zone_map[agent]
         agent_start_y = header_h + row_idx * zone_row_h
 
         for zone in zones:
@@ -298,13 +349,18 @@ def main():
 
             zone_root = info["zone_root"]
             ref_utc = info["ref_time_utc"]
+            image_idx = build_image_time_index(zone_root)
 
             # Paste raw frames
             for fi, wt in enumerate(targets):
                 x = label_w + fi * thumb
                 target_utc = ref_utc + datetime.timedelta(days=wt)
-                img_path = raw_image_path(zone_root, target_utc)
-                if img_path.exists():
+                img_path = backfilled_image_path(
+                    image_idx,
+                    target_utc,
+                    max_backfill_minutes=args.image_backfill_minutes,
+                )
+                if img_path is not None:
                     paste_thumbnail(canvas, img_path, x, y, thumb, thumb)
 
             # Action coefficient step-function strip (one bar per frame)

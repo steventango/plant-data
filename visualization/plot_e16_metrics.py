@@ -26,7 +26,7 @@ OUTPUT_DIR = Path("results/e16_metrics")
 
 
 # ── Data loading & metric computation ───────────────────────────────────────
-def load_episode_metrics(path: Path, exp_id: int) -> pd.DataFrame:
+def load_episode_metrics(path: Path, exp_id: int, max_steps: int) -> pd.DataFrame:
     df = pl.read_parquet(
         path,
         columns=[
@@ -43,12 +43,11 @@ def load_episode_metrics(path: Path, exp_id: int) -> pd.DataFrame:
     df = df.filter(pl.col("experiment") == exp_id)
     df = df.sort("zone", "plant_id", "wall_time")
 
-    # Truncate to first 14 timesteps (days 0–13 → 13 rewards) per episode
-    MAX_REWARDS = 13
+    # Truncate to max_steps timesteps per episode
     df = df.with_columns(
         pl.col("wall_time").rank("ordinal").over("zone", "plant_id").alias("_step"),
     )
-    df = df.filter(pl.col("_step") <= MAX_REWARDS + 1)  # keep day 0..13
+    df = df.filter(pl.col("_step") <= max_steps)
 
     episodes = df.group_by(["zone", "plant_id"]).agg(
         pl.col("reward").sum().alias("return"),
@@ -77,8 +76,14 @@ def load_episode_metrics(path: Path, exp_id: int) -> pd.DataFrame:
 # ── Layout builder (dynamic from data) ──────────────────────────────────────
 # Preset palette: base colour + 3 shades (light → dark) per agent slot
 _PALETTE_BASE = [
-    "#4e9ac7", "#e85c4a", "#6fbf3e", "#a050b0",
-    "#e89c2a", "#2ab0a0", "#c06030", "#8080c0",
+    "#4e9ac7",
+    "#e85c4a",
+    "#6fbf3e",
+    "#a050b0",
+    "#e89c2a",
+    "#2ab0a0",
+    "#c06030",
+    "#8080c0",
 ]
 _PALETTE_SHADES = [
     ["#a8d4ef", "#4e9ac7", "#1e6a96"],
@@ -91,8 +96,14 @@ _PALETTE_SHADES = [
     ["#c0c0e8", "#8080c0", "#404090"],
 ]
 _PALETTE_BG = [
-    "#eaf4fb", "#fdecea", "#eef9e6", "#f5eafb",
-    "#fef6e8", "#e8f9f7", "#faeee8", "#eeeef8",
+    "#eaf4fb",
+    "#fdecea",
+    "#eef9e6",
+    "#f5eafb",
+    "#fef6e8",
+    "#e8f9f7",
+    "#faeee8",
+    "#eeeef8",
 ]
 
 
@@ -134,6 +145,27 @@ def bootstrap_ci(x, n_boot: int = 10_000, ci: float = 0.95, seed: int = 0):
     lo = np.percentile(means, (1 - ci) / 2 * 100)
     hi = np.percentile(means, (1 + ci) / 2 * 100)
     return x.mean(), lo, hi
+
+
+def iqr_bounds(values: pd.Series, multiplier: float = 1.5) -> tuple[float, float]:
+    """Return lower/upper Tukey IQR bounds for a numeric series."""
+    q1 = values.quantile(0.25)
+    q3 = values.quantile(0.75)
+    iqr = q3 - q1
+    if pd.isna(iqr) or iqr == 0:
+        return q1, q3
+    return q1 - multiplier * iqr, q3 + multiplier * iqr
+
+
+def drop_iqr_outliers(
+    pdf: pd.DataFrame, metric: str, multiplier: float = 1.5
+) -> pd.DataFrame:
+    """Drop rows whose metric value lies outside Tukey IQR bounds."""
+    vals = pdf[metric].dropna()
+    if len(vals) < 4:
+        return pdf
+    lo, hi = iqr_bounds(vals, multiplier=multiplier)
+    return pdf.loc[pdf[metric].between(lo, hi)].reset_index(drop=True)
 
 
 # ── Holm–Bonferroni correction on a list of p-values ───────────────────────
@@ -239,15 +271,25 @@ def _agent_center(zone_pos: dict[int, float], agent: str, zone_map) -> float:
 
 
 METRICS = [
-    ("return", "Return (Σ reward, days 0–13)"),
+    ("return", "Return (Σ reward)"),
     ("pct_area_change", "Area Change (%)"),
     ("abs_area_change", "Final − Initial Area (cm²)"),
 ]
 
 
 # ── Main draw ───────────────────────────────────────────────────────────────
-def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
-         agent_order, zone_map, agent_colors, zone_colors, agent_bg):
+def draw(
+    pdf: pd.DataFrame,
+    output_dir: Path,
+    exp_id: int,
+    agent_order,
+    zone_map,
+    agent_colors,
+    zone_colors,
+    agent_bg,
+    drop_outliers: bool = False,
+    iqr_multiplier: float = 1.5,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     zone_pos = _zone_positions(agent_order, zone_map)
@@ -257,7 +299,25 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
     plt.rcParams.update({"font.family": "sans-serif"})
 
     for ax, (metric, label) in zip(axes, METRICS):
-        vals_all = pdf[metric].dropna()
+        metric_pdf = (
+            drop_iqr_outliers(pdf, metric, multiplier=iqr_multiplier)
+            if drop_outliers
+            else pdf
+        )
+        vals_all = metric_pdf[metric].dropna()
+        if len(vals_all) == 0:
+            ax.set_axis_off()
+            ax.text(
+                0.5,
+                0.5,
+                f"No data after IQR filter\n{label}",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=10,
+                color="0.4",
+            )
+            continue
         ymin_data, ymax_data = vals_all.min(), vals_all.max()
         yrange = ymax_data - ymin_data
 
@@ -270,7 +330,7 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
 
         # ── Violin per zone ─────────────────────────────────────────────
         for z in all_zones_ordered:
-            vals = pdf.loc[pdf["zone"] == z, metric].dropna().values
+            vals = metric_pdf.loc[metric_pdf["zone"] == z, metric].dropna().values
             if len(vals) < 3:
                 continue
             vp = ax.violinplot(
@@ -287,7 +347,7 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
 
         # ── Raw data jittered ───────────────────────────────────────────
         for z in all_zones_ordered:
-            vals = pdf.loc[pdf["zone"] == z, metric].dropna().values
+            vals = metric_pdf.loc[metric_pdf["zone"] == z, metric].dropna().values
             rng = np.random.default_rng(z + 42)
             jitter = rng.uniform(-_ZONE_STEP * 0.32, _ZONE_STEP * 0.32, size=len(vals))
             ax.scatter(
@@ -303,7 +363,7 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
 
         # ── Mean + 95 % bootstrap CI per zone ──────────────────────────
         for z in all_zones_ordered:
-            vals = pdf.loc[pdf["zone"] == z, metric].dropna().values
+            vals = metric_pdf.loc[metric_pdf["zone"] == z, metric].dropna().values
             if len(vals) == 0:
                 continue
             mean, lo, hi = bootstrap_ci(vals, seed=z)
@@ -328,8 +388,8 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
         all_within_pvals = []
         for ag in agent_order:
             for za, zb in combinations(zone_map[ag], 2):
-                va = pdf.loc[pdf["zone"] == za, metric].dropna().values
-                vb = pdf.loc[pdf["zone"] == zb, metric].dropna().values
+                va = metric_pdf.loc[metric_pdf["zone"] == za, metric].dropna().values
+                vb = metric_pdf.loc[metric_pdf["zone"] == zb, metric].dropna().values
                 _, p = sp_stats.ttest_ind(va, vb, equal_var=False)
                 all_within_pairs.append((za, zb))
                 all_within_pvals.append(p)
@@ -366,8 +426,8 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
         if agent_pairs:
             agent_pairs_pvals = []
             for aa, ab in agent_pairs:
-                va = pdf.loc[pdf["agent"] == aa, metric].dropna().values
-                vb = pdf.loc[pdf["agent"] == ab, metric].dropna().values
+                va = metric_pdf.loc[metric_pdf["agent"] == aa, metric].dropna().values
+                vb = metric_pdf.loc[metric_pdf["agent"] == ab, metric].dropna().values
                 _, p = sp_stats.ttest_ind(va, vb, equal_var=False)
                 agent_pairs_pvals.append(p)
             adj_a = holm_bonferroni(agent_pairs_pvals)
@@ -399,7 +459,7 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
 
         # ── Agent-level mean + CI ────────────────────────────────────
         for ag in agent_order:
-            vals = pdf.loc[pdf["agent"] == ag, metric].dropna().values
+            vals = metric_pdf.loc[metric_pdf["agent"] == ag, metric].dropna().values
             if len(vals) == 0:
                 continue
             mean, lo, hi = bootstrap_ci(vals, seed=hash(ag) % 1000)
@@ -421,11 +481,15 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
 
         # ── Nested ANOVA decomposition annotation ──────────────────────
         agent_groups = [
-            pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in agent_order
+            metric_pdf.loc[metric_pdf["agent"] == ag, metric].dropna().values
+            for ag in agent_order
         ]
         W_ag, p_ag = welch_anova(agent_groups)
         _, _, _, _, eta2_ag, eta2_zw = nested_anova(
-            pdf, metric, agent_order, zone_map,
+            metric_pdf,
+            metric,
+            agent_order,
+            zone_map,
         )
         ax.text(
             0.98,
@@ -469,7 +533,7 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
             )
 
     fig.suptitle(
-        f"Experiment {exp_id} — Agent vs Zone Performance  (days 0–13)",
+        f"Experiment {exp_id} — Agent vs Zone Performance",
         fontsize=13,
         fontweight="bold",
     )
@@ -483,12 +547,19 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
     # ── Console summary ─────────────────────────────────────────────────
     print("\n══ Levene's test for homogeneity of variances ══")
     for metric, label in METRICS:
+        metric_pdf = (
+            drop_iqr_outliers(pdf, metric, multiplier=iqr_multiplier)
+            if drop_outliers
+            else pdf
+        )
         agent_groups = [
-            pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in agent_order
+            metric_pdf.loc[metric_pdf["agent"] == ag, metric].dropna().values
+            for ag in agent_order
         ]
-        all_zones_sorted = sorted(pdf["zone"].unique())
+        all_zones_sorted = sorted(metric_pdf["zone"].unique())
         zone_groups = [
-            pdf.loc[pdf["zone"] == z, metric].dropna().values for z in all_zones_sorted
+            metric_pdf.loc[metric_pdf["zone"] == z, metric].dropna().values
+            for z in all_zones_sorted
         ]
         valid_ag = [g for g in agent_groups if len(g) >= 2]
         valid_zn = [g for g in zone_groups if len(g) >= 2]
@@ -496,17 +567,22 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
             L_ag, p_lev_ag = sp_stats.levene(*valid_ag)
             verdict_ag = "VIOLATED" if p_lev_ag < 0.05 else "ok"
             print(f"\n{label}")
-            print(f"  Agent groups:  Levene W={L_ag:.3f}, p={p_lev_ag:.4f}  [{verdict_ag}]")
+            print(
+                f"  Agent groups:  Levene W={L_ag:.3f}, p={p_lev_ag:.4f}  [{verdict_ag}]"
+            )
         if len(valid_zn) >= 2:
             L_zn, p_lev_zn = sp_stats.levene(*valid_zn)
             verdict_zn = "VIOLATED" if p_lev_zn < 0.05 else "ok"
-            print(f"  Zone groups:   Levene W={L_zn:.3f}, p={p_lev_zn:.4f}  [{verdict_zn}]")
+            print(
+                f"  Zone groups:   Levene W={L_zn:.3f}, p={p_lev_zn:.4f}  [{verdict_zn}]"
+            )
         for ag in agent_order:
             zs = zone_map[ag]
             if len(zs) < 2:
                 continue
             within_groups = [
-                pdf.loc[pdf["zone"] == z, metric].dropna().values for z in zs
+                metric_pdf.loc[metric_pdf["zone"] == z, metric].dropna().values
+                for z in zs
             ]
             variances = [g.var(ddof=1) for g in within_groups if len(g) >= 2]
             valid_w = [g for g in within_groups if len(g) >= 2]
@@ -521,16 +597,27 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
 
     print("\n══ Nested ANOVA decomposition (Welch) ══")
     for metric, label in METRICS:
+        metric_pdf = (
+            drop_iqr_outliers(pdf, metric, multiplier=iqr_multiplier)
+            if drop_outliers
+            else pdf
+        )
         agent_groups = [
-            pdf.loc[pdf["agent"] == ag, metric].dropna().values for ag in agent_order
+            metric_pdf.loc[metric_pdf["agent"] == ag, metric].dropna().values
+            for ag in agent_order
         ]
         W_ag, p_ag = welch_anova(agent_groups)
         ss_ag, ss_zw, ss_res, ss_tot, eta2_ag, eta2_zw = nested_anova(
-            pdf, metric, agent_order, zone_map,
+            metric_pdf,
+            metric,
+            agent_order,
+            zone_map,
         )
         eta2_res = ss_res / ss_tot if ss_tot > 0 else 0.0
         print(f"\n{label}")
-        print(f"  Welch Agent ({len(agent_order)} groups): W={W_ag:.3f}, p={p_ag:.4f}, η²={eta2_ag:.4f}")
+        print(
+            f"  Welch Agent ({len(agent_order)} groups): W={W_ag:.3f}, p={p_ag:.4f}, η²={eta2_ag:.4f}"
+        )
         print(f"  Zone|Agent (nested):    η²={eta2_zw:.4f}")
         print(f"  Residual:               η²={eta2_res:.4f}")
         print(f"  → Agent η²={eta2_ag:.4f}, Zone|Agent η²={eta2_zw:.4f}")
@@ -538,18 +625,28 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
     if len(agent_order) > 1:
         print("\n══ Between-agent pairwise (Holm–Bonferroni) ══")
         for metric, label in METRICS:
+            metric_pdf = (
+                drop_iqr_outliers(pdf, metric, multiplier=iqr_multiplier)
+                if drop_outliers
+                else pdf
+            )
             print(f"\n{label}:")
-            for (a, b), p in pairwise_tests(pdf, metric, "agent"):
+            for (a, b), p in pairwise_tests(metric_pdf, metric, "agent"):
                 print(f"  {a:20s} vs {b:20s}  p={p:.4f}  {sig_label(p)}")
 
     print("\n══ Within-agent pairwise by zone (global Holm–Bonferroni) ══")
     for metric, label in METRICS:
+        metric_pdf = (
+            drop_iqr_outliers(pdf, metric, multiplier=iqr_multiplier)
+            if drop_outliers
+            else pdf
+        )
         print(f"\n{label}:")
         all_pairs_info = []
         for ag in agent_order:
             for za, zb in combinations(zone_map[ag], 2):
-                va = pdf.loc[pdf["zone"] == za, metric].dropna().values
-                vb = pdf.loc[pdf["zone"] == zb, metric].dropna().values
+                va = metric_pdf.loc[metric_pdf["zone"] == za, metric].dropna().values
+                vb = metric_pdf.loc[metric_pdf["zone"] == zb, metric].dropna().values
                 _, p = sp_stats.ttest_ind(va, vb, equal_var=False)
                 all_pairs_info.append((ag, za, zb, p))
         if not all_pairs_info:
@@ -557,9 +654,7 @@ def draw(pdf: pd.DataFrame, output_dir: Path, exp_id: int,
             continue
         adj = holm_bonferroni([p for _, _, _, p in all_pairs_info])
         for (ag, za, zb, _), p_adj in zip(all_pairs_info, adj):
-            print(
-                f"  [{ag}] zone {za} vs zone {zb}  p={p_adj:.4f}  {sig_label(p_adj)}"
-            )
+            print(f"  [{ag}] zone {za} vs zone {zb}  p={p_adj:.4f}  {sig_label(p_adj)}")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -580,15 +675,33 @@ if __name__ == "__main__":
     parser.add_argument(
         "--min-return",
         type=float,
-        default=2.0,
+        default=None,
         metavar="R",
-        help="Exclude plants whose total return is less than R (e.g. 2 → exclude return <2).",
+        help="Optional: exclude plants whose total return is less than R (e.g. 2 excludes return <2).",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=14,
+        metavar="S",
+        help="Maximum number of steps to include in the analysis.",
     )
     parser.add_argument(
         "--experiment",
         type=str,
         default="16",
         help="Experiment ID to plot, or 'all' to run all experiments in the dataset.",
+    )
+    parser.add_argument(
+        "--drop-iqr-outliers",
+        action="store_true",
+        help="Drop Tukey IQR outliers before metric-level plotting and stats.",
+    )
+    parser.add_argument(
+        "--iqr-multiplier",
+        type=float,
+        default=1.5,
+        help="Tukey IQR multiplier used when --drop-iqr-outliers is set.",
     )
     args = parser.parse_args()
 
@@ -602,11 +715,11 @@ if __name__ == "__main__":
         exp_ids = [int(args.experiment)]
 
     for exp_id in exp_ids:
-        print(f"\n{'═'*60}")
+        print(f"\n{'═' * 60}")
         print(f"  Experiment {exp_id}")
-        print(f"{'═'*60}")
+        print(f"{'═' * 60}")
 
-        pdf = load_episode_metrics(parquet_path, exp_id)
+        pdf = load_episode_metrics(parquet_path, exp_id, args.max_steps)
         print(f"Loaded {len(pdf)} plant episodes from E{exp_id}")
 
         if len(pdf) == 0:
@@ -629,5 +742,15 @@ if __name__ == "__main__":
         print(f"Agents: {agent_order}")
         print(f"Zones:  {sorted(pdf['zone'].unique())}")
 
-        draw(pdf, Path(args.output), exp_id,
-             agent_order, zone_map, agent_colors, zone_colors, agent_bg)
+        draw(
+            pdf,
+            Path(args.output),
+            exp_id,
+            agent_order,
+            zone_map,
+            agent_colors,
+            zone_colors,
+            agent_bg,
+            drop_outliers=args.drop_iqr_outliers,
+            iqr_multiplier=args.iqr_multiplier,
+        )

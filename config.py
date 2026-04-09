@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 
-VERSION = "v24"
+VERSION = "v25"
 VISION_VERSION = "v6"
 
 GOOD_ZONE_DAYS = {

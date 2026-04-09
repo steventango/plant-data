@@ -65,5 +65,18 @@ uv run python process_zone.py --data-path /data/plant-rl/online/E16/P1/InAC10/al
 uv run python process_zone.py --data-path /data/plant-rl/online/E16/P1/InAC11/alliance-zone11
 uv run python process_zone.py --data-path /data/plant-rl/online/E16/P1/InAC12/alliance-zone12
 
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Constant1/alliance-zone01
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Sequence2/alliance-zone02
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Sequence3/alliance-zone03
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Constant4/alliance-zone04
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Constant5/alliance-zone05
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Sequence6/alliance-zone06
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Sequence7/alliance-zone07
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Constant8/alliance-zone08
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Constant9/alliance-zone09
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Sequence10/alliance-zone10
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Sequence11/alliance-zone11
+uv run python process_zone.py --data-path /data/plant-rl/online/E17/P1/Constant12/alliance-zone12
+
 uv run python join_zones.py --root-dir /data/plant-rl/online
 uv run python create_minari_dataset.py

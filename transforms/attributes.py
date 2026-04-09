@@ -100,6 +100,19 @@ EXPERIMENT_EVENTS = {
         "num_pots": 64,
         "num_pots_per_tray": 32,
     },
+    17: {
+        "sterilized_date": date(2026, 3, 16),
+        "plate_date": date(2026, 3, 19),
+        "transplant_date": date(2026, 3, 26),
+        "remove_domes_date": date(2026, 3, 29),
+        "watering": {
+            date(2026, 3, 26): 1.0,
+            date(2026, 3, 30): 0.05,
+            date(2026, 3, 31): 0.75,
+        },
+        "num_pots": 36,
+        "num_pots_per_tray": 18,
+    },
     16: {
         "sterilized_date": date(2026, 1, 19),
         "plate_date": date(2026, 1, 23),
@@ -173,6 +186,18 @@ def get_agent_name(df: pl.DataFrame) -> pl.DataFrame:
             .then(pl.lit("InAC_Seed7"))
             .when(pl.col("zone").is_in([4, 8, 12]))
             .then(pl.lit("InAC_Seed21"))
+            .otherwise(pl.lit("Other"))
+        )
+        .when(pl.col("experiment") == 17)
+        .then(
+            pl.when(pl.col("zone").is_in([1, 5, 9]))
+            .then(pl.lit("RedRed"))
+            .when(pl.col("zone").is_in([2, 6, 10]))
+            .then(pl.lit("RedBlue"))
+            .when(pl.col("zone").is_in([3, 7, 11]))
+            .then(pl.lit("BlueRed"))
+            .when(pl.col("zone").is_in([4, 8, 12]))
+            .then(pl.lit("BlueBlue"))
             .otherwise(pl.lit("Other"))
         )
         .otherwise(pl.lit("Other"))
