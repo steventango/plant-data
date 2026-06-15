@@ -54,6 +54,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
                 "action.3",
                 "action.4",
                 "action.5",
+                "power",
             ],
         )
         for path in raw_csv_paths
@@ -97,6 +98,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
         pl.col("action.3").fill_null(strategy="forward"),
         pl.col("action.4").fill_null(strategy="forward"),
         pl.col("action.5").fill_null(strategy="forward"),
+        pl.col("power").fill_null(strategy="forward"),
     )
     df = transform_action(df)
     if exp_id == 18:
