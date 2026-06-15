@@ -22,7 +22,7 @@ from transforms import (
 logging.basicConfig(level=logging.INFO)
 
 
-def process_zone(data_path, output_path, exp_id, zone_id, good_days):
+def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling="daily"):
     logging.info(f"Processing Experiment {exp_id}, Zone {zone_id} from {data_path}")
 
     # Check if raw.csv exists in the data_path
@@ -99,11 +99,17 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         pl.col("action.5").fill_null(strategy="forward"),
     )
     df = transform_action(df)
-    df = df.filter(
-        (pl.col("time").dt.time() >= time(9, 30, tzinfo=local_tzinfo))
-        & (pl.col("time").dt.time() < time(20, 30, tzinfo=local_tzinfo))
-    )
-    # transform action by averaging over the day between 9:30 and 20:30
+    if exp_id == 18:
+        df = df.filter(
+            (pl.col("time").dt.time() >= time(9, 0, tzinfo=local_tzinfo))
+            & (pl.col("time").dt.time() <= time(21, 0, tzinfo=local_tzinfo))
+        )
+    else:
+        df = df.filter(
+            (pl.col("time").dt.time() >= time(9, 30, tzinfo=local_tzinfo))
+            & (pl.col("time").dt.time() < time(20, 30, tzinfo=local_tzinfo))
+        )
+    # transform action by averaging over the day
     df = df.with_columns(
         pl.col("red_coef").mean().over("experiment", "zone", "day").alias("red_coef"),
         pl.col("white_coef")
@@ -112,13 +118,26 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         .alias("white_coef"),
         pl.col("blue_coef").mean().over("experiment", "zone", "day").alias("blue_coef"),
     )
-    subsampling = "daily"
     if subsampling == "daily":
         # daily subsampling
         df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=local_tzinfo))
     elif subsampling == "hourly":
         # hourly subsampling
         df = df.filter(pl.col("time").dt.minute() == 30)
+    elif subsampling == "4hourly":
+        if exp_id == 18:
+            # For E18, daytime is 9:00 to 21:00, but 21:00 is dark.
+            # So sample at 9:00, 13:00, 17:00 (minutes = 00)
+            df = df.filter(
+                (pl.col("time").dt.minute() == 0) &
+                (pl.col("time").dt.hour().is_in([9, 13, 17]))
+            )
+        else:
+            # 4-hourly subsampling (e.g. 9:30, 13:30, 17:30)
+            df = df.filter(
+                (pl.col("time").dt.minute() == 30) &
+                (pl.col("time").dt.hour().is_in([9, 13, 17]))
+            )
     else:
         raise ValueError(f"Unknown subsampling: {subsampling}")
 
@@ -146,7 +165,14 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
         .over("experiment", "zone", "plant_id")
         .alias("next_next_time"),
     )
-    duration = pl.duration(days=1) if subsampling == "daily" else pl.duration(hours=1)
+    if subsampling == "daily":
+        expected_next = pl.col("time") + pl.duration(days=1)
+    elif subsampling == "4hourly":
+        is_overnight = (pl.col("time").dt.hour() == 17)
+        expected_next = pl.when(is_overnight).then(pl.col("time") + pl.duration(hours=16)).otherwise(pl.col("time") + pl.duration(hours=4))
+    else:
+        expected_next = pl.col("time") + pl.duration(hours=1)
+
     df = df.with_columns(
         (
             (
@@ -155,7 +181,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days):
                 & (pl.col("wall_time") < 13)
             )
             | (
-                (pl.col("next_time") != pl.col("time") + duration)
+                (pl.col("next_time") != expected_next)
                 & pl.col("next_time").is_not_null()
             )
         ).alias("truncated")
@@ -211,6 +237,17 @@ def main():
         required=True,
         help="Path to the directory containing raw.csv",
     )
+    parser.add_argument(
+        "--subsampling",
+        choices=["daily", "hourly", "4hourly"],
+        default="daily",
+        help="Time-of-day sampling cadence",
+    )
+    parser.add_argument(
+        "--output-suffix",
+        default="",
+        help="Optional suffix on output parquet filename (e.g. '_hourly')",
+    )
     args = parser.parse_args()
 
     data_path = args.data_path.rstrip("/")
@@ -238,9 +275,16 @@ def main():
 
     # Construct output path
     output_dir = Path(data_path) / "processed" / VERSION
-    output_path = output_dir / f"E{exp_id}_Z{zone_id}.parquet"
+    output_path = output_dir / f"E{exp_id}_Z{zone_id}{args.output_suffix}.parquet"
 
-    process_zone(data_path, str(output_path), exp_id, zone_id, good_days)
+    process_zone(
+        data_path,
+        str(output_path),
+        exp_id,
+        zone_id,
+        good_days,
+        subsampling=args.subsampling,
+    )
 
 
 if __name__ == "__main__":
