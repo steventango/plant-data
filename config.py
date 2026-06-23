@@ -4,7 +4,7 @@ import numpy as np
 
 
 VERSION = "v27"
-VISION_VERSION = "v6"
+VISION_VERSION = "v7"
 
 GOOD_ZONE_DAYS = {
     "E11/zone1": [1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
@@ -71,6 +71,21 @@ GOOD_ZONE_DAYS = {
     "E16/zone11": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     "E16/zone12": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
 }
+
+E18_POLICY_MAP = {
+    1: "SequencePowerLawRamp",
+    2: "SequenceParabolic",
+    3: "ConstantLow",
+    4: "SequenceSeventyPercentRamp",
+    5: "SequenceLateRamp",
+    6: "SequenceBlueToRedLate",
+    7: "SequenceBlueToRedEarly",
+    8: "ConstantBlue",
+    9: "SequenceRedToBlueEarly",
+    10: "SequenceRedToBlueLate",
+    11: "Constant",
+}
+
 TIMEZONE = "America/Edmonton"
 tzinfo = ZoneInfo(TIMEZONE)
 RED = np.array([9.71409574, 34.97074468, 4.01515957, 0.0, 56.3, 6.13067376])
