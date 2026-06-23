@@ -10,10 +10,6 @@ Schema B (beat-Constant gate):
               -fail_mult * max(E)               otherwise
 """
 
-SCHEMA_B_FAIL_ENERGY_MULT = 2.0
-SCHEMA_B_GROWTH_FRAC = 0.95
-SCHEMA_A_BETAS = [0.0, 0.5, 1.0, 2.0]
-
 import argparse
 import sys
 from pathlib import Path
@@ -25,7 +21,11 @@ import polars as pl
 import seaborn as sns
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from config import E18_POLICY_MAP, VERSION
+from config import E18_POLICY_MAP, VERSION  # noqa: E402
+
+SCHEMA_B_FAIL_ENERGY_MULT = 2.0
+SCHEMA_B_GROWTH_FRAC = 0.95
+SCHEMA_A_BETAS = [0.0, 0.5, 1.0, 2.0]
 
 
 def inner_percentile_mean(x: np.ndarray, pct: float = 95) -> float:
@@ -58,9 +58,7 @@ def load_e18_summary(parquet: str, max_day: int) -> tuple[pd.DataFrame, float, f
     df_e18 = df.filter(pl.col("experiment") == 18).with_columns(
         pl.col("zone").replace_strict(E18_POLICY_MAP, default="Unknown").alias("policy")
     )
-    df_e18 = df_e18.filter(
-        (pl.col("policy") != "Unknown") & (pl.col("day") <= max_day)
-    )
+    df_e18 = df_e18.filter((pl.col("policy") != "Unknown") & (pl.col("day") <= max_day))
 
     returns = df_e18.group_by(["zone", "policy", "plant_id"]).agg(
         pl.col("reward").sum().alias("raw_return"),
@@ -81,12 +79,14 @@ def load_e18_summary(parquet: str, max_day: int) -> tuple[pd.DataFrame, float, f
     rows = []
     for policy in merged["policy"].unique():
         sub = merged[merged["policy"] == policy]
-        rows.append({
-            "policy": policy,
-            "energy": sub["energy"].iloc[0],
-            "raw_return": inner_percentile_mean(sub["raw_return"].to_numpy()),
-            "log_energy_delta": np.log(sub["energy"].iloc[0]) - np.log(e_const),
-        })
+        rows.append(
+            {
+                "policy": policy,
+                "energy": sub["energy"].iloc[0],
+                "raw_return": inner_percentile_mean(sub["raw_return"].to_numpy()),
+                "log_energy_delta": np.log(sub["energy"].iloc[0]) - np.log(e_const),
+            }
+        )
     return pd.DataFrame(rows), e_const, r_const
 
 
@@ -121,12 +121,20 @@ def plot_schema_a_panel(ax, base, beta, palette, energy_label):
     pf = pareto_frontier(df, "energy", "induced")
     for _, row in df.iterrows():
         ax.scatter(
-            row["energy"], row["induced"],
-            color=palette[row["policy"]], s=80, zorder=3,
+            row["energy"],
+            row["induced"],
+            color=palette[row["policy"]],
+            s=80,
+            zorder=3,
         )
     ax.plot(
-        pf["energy"], pf["induced"], color="#e74c3c", linestyle="--",
-        linewidth=2, alpha=0.85, zorder=1,
+        pf["energy"],
+        pf["induced"],
+        color="#e74c3c",
+        linestyle="--",
+        linewidth=2,
+        alpha=0.85,
+        zorder=1,
     )
     title = "Raw return (β=0)" if beta == 0 else f"Schema A: β={beta:g}"
     ax.set_title(title, fontsize=11, fontweight="bold")
@@ -139,11 +147,14 @@ def main():
         description="Analyze reward-with-energy schemas for E18."
     )
     parser.add_argument(
-        "--parquet", "-p",
+        "--parquet",
+        "-p",
         default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
     )
     parser.add_argument(
-        "--out", "-o", default="results/e18_reward_with_energy.png",
+        "--out",
+        "-o",
+        default="results/e18_reward_with_energy.png",
     )
     parser.add_argument("--max-day", type=int, default=13)
     args = parser.parse_args()
@@ -173,7 +184,9 @@ def main():
     rank_rows = []
     for beta in SCHEMA_A_BETAS:
         ind = induced_return_schema_a(base, beta)
-        ranks = pd.Series(ind.values, index=base["policy"]).rank(ascending=False, method="min")
+        ranks = pd.Series(ind.values, index=base["policy"]).rank(
+            ascending=False, method="min"
+        )
         for policy in policy_order:
             rank_rows.append({"beta": beta, "policy": policy, "rank": ranks[policy]})
     pivot = (
@@ -182,7 +195,11 @@ def main():
         .reindex(policy_order)
     )
     sns.heatmap(
-        pivot, annot=True, fmt=".0f", cmap="RdYlGn_r", ax=ax_rank,
+        pivot,
+        annot=True,
+        fmt=".0f",
+        cmap="RdYlGn_r",
+        ax=ax_rank,
         cbar_kws={"label": "Rank (1=best)"},
     )
     ax_rank.set_title("Schema A: rank vs β", fontweight="bold")
@@ -198,23 +215,37 @@ def main():
     for _, row in df_b.iterrows():
         marker = "o" if row["passed"] else "x"
         ax_b.scatter(
-            row["energy"], row["induced"], s=100,
-            color=palette[row["policy"]], marker=marker, zorder=3,
+            row["energy"],
+            row["induced"],
+            s=100,
+            color=palette[row["policy"]],
+            marker=marker,
+            zorder=3,
         )
         if row["passed"]:
             ax_b.annotate(
                 row["policy"].replace("Sequence", "Seq."),
                 (row["energy"], row["induced"]),
-                fontsize=7, ha="center", va="top",
+                fontsize=7,
+                ha="center",
+                va="top",
             )
     ax_b.axhline(
-        fail_penalty, color="0.5", linestyle=":", linewidth=1.5,
+        fail_penalty,
+        color="0.5",
+        linestyle=":",
+        linewidth=1.5,
         label=f"Fail penalty ({SCHEMA_B_FAIL_ENERGY_MULT:.0f}× max E)",
     )
     if not pf_b.empty:
         ax_b.plot(
-            pf_b["energy"], pf_b["induced"], color="#e74c3c", linestyle="--",
-            linewidth=2, alpha=0.85, label="Pareto (pass only)",
+            pf_b["energy"],
+            pf_b["induced"],
+            color="#e74c3c",
+            linestyle="--",
+            linewidth=2,
+            alpha=0.85,
+            label="Pareto (pass only)",
         )
     ax_b.set_title(
         f"Schema B: pass→−E, fail→{fail_penalty:.0f}\n"
@@ -227,7 +258,9 @@ def main():
 
     fig.suptitle(
         "E18 reward-with-energy schemas",
-        fontsize=14, fontweight="bold", y=1.01,
+        fontsize=14,
+        fontweight="bold",
+        y=1.01,
     )
 
     out_path = Path(args.out)
@@ -242,12 +275,18 @@ def main():
     print("\nSchema A rankings:")
     for beta in SCHEMA_A_BETAS:
         ind = induced_return_schema_a(base, beta)
-        top = pd.Series(ind.values, index=base["policy"]).sort_values(ascending=False).head(3)
+        top = (
+            pd.Series(ind.values, index=base["policy"])
+            .sort_values(ascending=False)
+            .head(3)
+        )
         print(f"  β={beta:g}: {', '.join(top.index)}")
     print(f"\nSchema B (pass→−E, fail→{fail_penalty:.0f}):")
-    print(df_b.sort_values("induced", ascending=False)[
-        ["policy", "raw_return", "energy", "passed", "induced"]
-    ].to_string(index=False, float_format=lambda x: f"{x:.4f}"))
+    print(
+        df_b.sort_values("induced", ascending=False)[
+            ["policy", "raw_return", "energy", "passed", "induced"]
+        ].to_string(index=False, float_format=lambda x: f"{x:.4f}")
+    )
 
 
 if __name__ == "__main__":

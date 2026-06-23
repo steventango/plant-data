@@ -35,8 +35,8 @@ from sklearn.metrics import r2_score
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
 
-from config import VERSION
-from visualization.e18_power import PHOTOPERIOD_HOURS, daily_power_energy
+from config import VERSION  # noqa: E402
+from visualization.e18_power import PHOTOPERIOD_HOURS, daily_power_energy  # noqa: E402
 
 PARQUET = ROOT / f"/data/plant-rl/offline/{VERSION}/mixed-e18-daily-v27.parquet"
 ZONE_COLORS = {1: "#e74c3c", 3: "#3498db", 4: "#2ecc71", 11: "#9b59b6"}
@@ -70,10 +70,7 @@ def main():
     # Local date: convert Edmonton time → Etc/GMT-2 and take date
     intensity_by_zone_date = (
         df.with_columns(
-            pl.col("time")
-            .dt.convert_time_zone("Etc/GMT-2")
-            .dt.date()
-            .alias("date")
+            pl.col("time").dt.convert_time_zone("Etc/GMT-2").dt.date().alias("date")
         )
         .group_by(["zone", "date"])
         .agg(pl.col("intensity").mean())
@@ -85,12 +82,12 @@ def main():
         power_df.select(["zone", "date", "mean_power_W", "energy_Wh"]),
         on=["zone", "date"],
         how="inner",
-    ).filter(
-        pl.col("intensity").is_not_null() & pl.col("mean_power_W").is_not_null()
-    )
+    ).filter(pl.col("intensity").is_not_null() & pl.col("mean_power_W").is_not_null())
 
     if joined.is_empty():
-        print("Join produced no rows. Check date alignment between parquet and raw logs.")
+        print(
+            "Join produced no rows. Check date alignment between parquet and raw logs."
+        )
         return
 
     print(f"  {joined.height} joined (zone, date) pairs after inner join")
@@ -127,8 +124,12 @@ def main():
 
     print(f"\nLinear  P = k · a  (OLS):    k = {k_ols:.3f} W   R² = {r2_linear:.4f}")
     print(f"Linear  P = k · a  (Huber):  k = {k_huber:.3f} W   R² = {r2_huber:.4f}")
-    print(f"Affine  P = P₀ + P₁·a  (OLS):   P₀={P0_aff:.3f} W  P₁={P1_aff:.3f} W  R²={r2_affine:.4f}")
-    print(f"Affine  P = P₀ + P₁·a  (Huber): P₀={P0_hub2:.3f} W  P₁={P1_hub2:.3f} W  R²={r2_hub2:.4f}")
+    print(
+        f"Affine  P = P₀ + P₁·a  (OLS):   P₀={P0_aff:.3f} W  P₁={P1_aff:.3f} W  R²={r2_affine:.4f}"
+    )
+    print(
+        f"Affine  P = P₀ + P₁·a  (Huber): P₀={P0_hub2:.3f} W  P₁={P1_hub2:.3f} W  R²={r2_hub2:.4f}"
+    )
 
     # ---- Per-zone linear slope (through origin) ----
     per_zone = {}
@@ -149,22 +150,42 @@ def main():
     for zone in args.zones:
         mask = zones_arr == zone
         ax1.scatter(
-            intensity[mask], power_W[mask],
+            intensity[mask],
+            power_W[mask],
             color=ZONE_COLORS.get(zone, "gray"),
-            alpha=0.6, s=40, label=f"Z{zone}", zorder=3,
+            alpha=0.6,
+            s=40,
+            label=f"Z{zone}",
+            zorder=3,
         )
 
     x_plot = np.linspace(intensity.min() * 0.9, intensity.max() * 1.05, 300)
-    ax1.plot(x_plot, k_ols * x_plot, "k-", lw=2,
-             label=f"Linear OLS  k={k_ols:.1f} W (R²={r2_linear:.3f})")
-    ax1.plot(x_plot, P0_aff + P1_aff * x_plot, color="steelblue", lw=1.5, linestyle="-.",
-             label=f"Affine OLS P₀={P0_aff:.1f}+{P1_aff:.1f}·a (R²={r2_affine:.3f})")
+    ax1.plot(
+        x_plot,
+        k_ols * x_plot,
+        "k-",
+        lw=2,
+        label=f"Linear OLS  k={k_ols:.1f} W (R²={r2_linear:.3f})",
+    )
+    ax1.plot(
+        x_plot,
+        P0_aff + P1_aff * x_plot,
+        color="steelblue",
+        lw=1.5,
+        linestyle="-.",
+        label=f"Affine OLS P₀={P0_aff:.1f}+{P1_aff:.1f}·a (R²={r2_affine:.3f})",
+    )
     for zone, info in per_zone.items():
         mask = zones_arr == zone
         a_range = np.linspace(intensity[mask].min(), intensity[mask].max(), 100)
-        ax1.plot(a_range, info["k_W"] * a_range,
-                 color=ZONE_COLORS.get(zone, "gray"), lw=1, linestyle=":",
-                 label=f"Z{zone} k={info['k_W']:.1f} W")
+        ax1.plot(
+            a_range,
+            info["k_W"] * a_range,
+            color=ZONE_COLORS.get(zone, "gray"),
+            lw=1,
+            linestyle=":",
+            label=f"Z{zone} k={info['k_W']:.1f} W",
+        )
     ax1.set_xlabel("Intensity (a)")
     ax1.set_ylabel("Mean photoperiod power (W)")
     ax1.set_title("Intensity → Power")
@@ -177,9 +198,13 @@ def main():
     for zone in args.zones:
         mask = zones_arr == zone
         ax2.scatter(
-            intensity[mask], resid[mask],
+            intensity[mask],
+            resid[mask],
             color=ZONE_COLORS.get(zone, "gray"),
-            alpha=0.6, s=40, label=f"Z{zone}", zorder=3,
+            alpha=0.6,
+            s=40,
+            label=f"Z{zone}",
+            zorder=3,
         )
     ax2.axhline(0, color="k", lw=0.8, linestyle="--")
     ax2.set_xlabel("Intensity (a)")
@@ -191,7 +216,8 @@ def main():
 
     fig.suptitle(
         f"E18 intensity → power fit  ({PHOTOPERIOD_HOURS:.0f} h photoperiod, n={len(intensity)} zone-days)",
-        fontsize=12, fontweight="bold",
+        fontsize=12,
+        fontweight="bold",
     )
     fig.tight_layout()
 

@@ -16,7 +16,6 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
     default_dir = Path(f"/data/plant-rl/offline/{VERSION}/")
-    default_input = default_dir / f"mixed-{VERSION}.parquet"
 
     parser = argparse.ArgumentParser(description="Convert processed dataset to Minari.")
     parser.add_argument(
@@ -30,8 +29,8 @@ def main():
         "--input",
         type=str,
         default=None,
-        help=f"Path to the input parquet file. "
-        f"Default: <input-dir>/mixed-{{VERSION}}.parquet",
+        help="Path to the input parquet file. "
+        "Default: <input-dir>/mixed-{VERSION}.parquet",
     )
     parser.add_argument(
         "--name",
@@ -51,7 +50,9 @@ def main():
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
-    input_path = Path(args.input) if args.input else input_dir / f"mixed-{VERSION}.parquet"
+    input_path = (
+        Path(args.input) if args.input else input_dir / f"mixed-{VERSION}.parquet"
+    )
 
     logging.info(f"Loading dataset from {input_path}")
 
