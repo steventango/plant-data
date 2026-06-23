@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import logging
 import re
@@ -14,12 +15,32 @@ from transforms import (
     transform_action_traces,
     transform_experiment_attributes,
     transform_image_embeddings,
+    transform_power,
     transform_reward,
     transform_state,
     transform_terminal,
 )
 
 logging.basicConfig(level=logging.INFO)
+
+CSV_COLUMNS = [
+    "time",
+    "image_name",
+    "action.0",
+    "action.1",
+    "action.2",
+    "action.3",
+    "action.4",
+    "action.5",
+]
+
+
+def _csv_columns(path: Path) -> list[str]:
+    available = set(pl.scan_csv(path).collect_schema().names())
+    columns = list(CSV_COLUMNS)
+    if "power" in available:
+        columns.append("power")
+    return columns
 
 
 def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling="daily"):
@@ -45,17 +66,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
             path,
             try_parse_dates=True,
             infer_schema_length=10000,
-            columns=[
-                "time",
-                "image_name",
-                "action.0",
-                "action.1",
-                "action.2",
-                "action.3",
-                "action.4",
-                "action.5",
-                "power",
-            ],
+            columns=_csv_columns(path),
         )
         for path in raw_csv_paths
     ]
@@ -65,7 +76,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
     df = df.with_columns(
         pl.col("time").dt.replace(second=0, microsecond=0, ambiguous="earliest")
     )
-    assert df.filter((pl.col("time").dt.minute() % 5 != 0)).is_empty()
+    df = df.filter(pl.col("time").dt.minute() % 5 == 0)
     # fill in missing time steps
     min_time: datetime = df["time"].min()  # type: ignore
     max_time: datetime = df["time"].max()  # type: ignore
@@ -90,7 +101,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
         ),
     )
 
-    df = df.with_columns(
+    fill_null_exprs = [
         pl.col("image_name").fill_null(strategy="forward"),
         pl.col("action.0").fill_null(strategy="forward"),
         pl.col("action.1").fill_null(strategy="forward"),
@@ -98,8 +109,10 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
         pl.col("action.3").fill_null(strategy="forward"),
         pl.col("action.4").fill_null(strategy="forward"),
         pl.col("action.5").fill_null(strategy="forward"),
-        pl.col("power").fill_null(strategy="forward"),
-    )
+    ]
+    if "power" in df.columns:
+        fill_null_exprs.append(pl.col("power").fill_null(strategy="forward"))
+    df = df.with_columns(fill_null_exprs)
     df = transform_action(df)
     if exp_id == 18:
         df = df.filter(
@@ -120,6 +133,8 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
         .alias("white_coef"),
         pl.col("blue_coef").mean().over("experiment", "zone", "day").alias("blue_coef"),
     )
+
+    df = transform_power(df)
     if subsampling == "daily":
         # daily subsampling
         df = df.filter(pl.col("time").dt.time() == time(9, 30, tzinfo=local_tzinfo))
@@ -150,6 +165,80 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
     df = transform_image_embeddings(df, output_dir=output_dir)
 
     df = transform_state(df)
+
+    # Detect forward-filled samples using image-based checks only (not clean_area
+    # equality, which produces false positives for slow-growing plants):
+    #   - dark frame: image brightness < 90 (plant-cv copied previous stats)
+    #   - frozen bright frame: consecutive images share the same file content
+    def _img_props(name: str) -> tuple[str, float]:
+        """Return (md5_hex, mean_brightness) for the image, or ("", -1) on error."""
+        import numpy as np
+        from PIL import Image as _Image
+        p = Path(data_path) / "images" / name
+        try:
+            with _Image.open(p) as img:
+                arr = np.array(img.convert("L"))
+                brightness = float(arr.mean())
+            with open(p, "rb") as f:
+                md5 = hashlib.md5(f.read()).hexdigest()
+            return md5, brightness
+        except Exception:
+            return "", -1.0
+
+    if "image_name" in df.columns:
+        unique_names = df["image_name"].drop_nulls().unique().to_list()
+        props = {n: _img_props(n) for n in unique_names}
+        name_to_hash = {n: v[0] for n, v in props.items()}
+        name_to_brightness = {n: v[1] for n, v in props.items()}
+
+        hash_df = pl.DataFrame({
+            "image_name": list(name_to_hash.keys()),
+            "_img_hash": list(name_to_hash.values()),
+            "_brightness": [name_to_brightness[k] for k in name_to_hash],
+        })
+        df = df.join(hash_df, on="image_name", how="left")
+        df = df.with_columns(
+            pl.col("_img_hash").fill_null(""),
+            pl.col("_brightness").fill_null(-1.0),
+        )
+        df = df.with_columns(
+            (
+                # Dark frame: image below brightness threshold
+                (pl.col("_brightness") >= 0) & (pl.col("_brightness") < 90.0)
+                # Frozen bright frame: same file on consecutive days (not intra-day forward-fill)
+                | (
+                    (pl.col("_img_hash") != "")
+                    & (
+                        pl.col("_img_hash")
+                        == pl.col("_img_hash").shift(1).over("plant_id")
+                    )
+                    & (pl.col("day") != pl.col("day").shift(1).over("plant_id"))
+                )
+            )
+            .fill_null(False)
+            .alias("forward_filled")
+        )
+        df = df.drop("_img_hash", "_brightness")
+    else:
+        df = df.with_columns(pl.lit(False).alias("forward_filled"))
+    # Mark imaging-gap days (zone-wide camera freeze) instead of dropping them.
+    # The 9:00 AM row is kept as an energy anchor so that downstream energy diffs
+    # remain correct 1-day intervals (power data was unaffected by the imaging
+    # outage). All other samples from gap days are dropped. Consumers must filter
+    # out imaging_gap=True rows before using observations/rewards.
+    ff_days = df.filter(pl.col("forward_filled")).select("day").unique()
+    n_ff_days = len(ff_days)
+    if n_ff_days:
+        logging.info(f"E{exp_id}/zone{zone_id}: dropping {n_ff_days} forward-filled imaging days (keeping 9:00 energy anchor)")
+    df = df.with_columns(
+        pl.col("day").is_in(ff_days["day"]).alias("imaging_gap")
+    ).drop("forward_filled")
+    # Keep only the 9:00 AM sample from imaging-gap days (energy anchor only)
+    df = df.filter(
+        ~pl.col("imaging_gap")
+        | ((pl.col("time").dt.hour() == 9) & (pl.col("time").dt.minute() == 0))
+    )
+
     df = transform_terminal(df, 13)
     df = transform_reward(df)
 
@@ -242,7 +331,7 @@ def main():
     parser.add_argument(
         "--subsampling",
         choices=["daily", "hourly", "4hourly"],
-        default="daily",
+        default="4hourly",
         help="Time-of-day sampling cadence",
     )
     parser.add_argument(

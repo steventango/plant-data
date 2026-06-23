@@ -1,4 +1,5 @@
 import polars as pl
+
 from .attributes import EXPERIMENT_EVENTS
 
 
@@ -78,6 +79,9 @@ def transform_watering_features(df: pl.DataFrame) -> pl.DataFrame:
 
     w_df = pl.DataFrame(watering_data)
 
+    df = df.with_columns(pl.col("experiment").cast(pl.Int32))
+    w_df = w_df.with_columns(pl.col("experiment").cast(pl.Int32))
+
     df = df.with_columns(pl.col("time").dt.date().alias("_date"))
 
     # Sort both dataframes as required by join_asof
@@ -108,10 +112,47 @@ def transform_watering_features(df: pl.DataFrame) -> pl.DataFrame:
 
 def transform_log_clean_area(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Calculate log_clean_area = log(clean_area + 1).
+    Calculate log_clean_area = log(clean_area).
+
+    When clean_area == 0 (e.g., plant-cv's EWM cleaning returned its 0
+    initial state because the first frames were outliers), log_clean_area
+    is set to NULL rather than 0. Otherwise transform_reward computes
+    reward = log_clean_area_t − log_clean_area_{t-1} and the transition
+    from a sentinel 0 to a real value produces a spurious log-jump (e.g.
+    reward = log(111) − 0 = 4.7 at day 0).
     """
     if "clean_area" in df.columns:
-        df = df.with_columns((pl.col("clean_area") + 1).log().alias("log_clean_area"))
+        df = df.with_columns(
+            pl.when(pl.col("clean_area") > 0)
+            .then(pl.col("clean_area").log())
+            .otherwise(None)
+            .alias("log_clean_area")
+        )
+    return df
+
+
+def transform_energy(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Per-step lighting energy (Wh) over each subsampled interval.
+
+    ``transform_power`` stores per-row energy at full resolution in ``energy``
+    and the running total in ``cumulative_energy``. After subsampling, this
+    differences ``cumulative_energy`` so ``energy[t]`` is the energy consumed
+    over the interval following timestep t. Summing ``energy`` over an episode
+    telescopes to total photoperiod energy. The final timestep has no following
+    interval and is left null.
+    """
+    if "cumulative_energy" not in df.columns:
+        return df
+    df = df.sort("experiment", "zone", "plant_id", "time")
+    df = df.with_columns(
+        (
+            pl.col("cumulative_energy")
+            .shift(-1)
+            .over("experiment", "zone", "plant_id")
+            - pl.col("cumulative_energy")
+        ).alias("energy")
+    )
     return df
 
 
@@ -122,6 +163,7 @@ def transform_state(df: pl.DataFrame) -> pl.DataFrame:
     df = transform_days_since_events(df)
     df = transform_watering_features(df)
     df = transform_wall_time(df)
+    df = transform_energy(df)
 
     if "clean_area" not in df.columns and "area" in df.columns:
         df = df.with_columns(pl.col("area").alias("clean_area"))

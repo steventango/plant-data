@@ -34,6 +34,7 @@ def load_episode_metrics(path: Path, exp_id: int, max_steps: int) -> pd.DataFram
             "zone",
             "plant_id",
             "wall_time",
+            "day",
             "clean_area",
             "log_clean_area",
             "reward",
@@ -43,11 +44,13 @@ def load_episode_metrics(path: Path, exp_id: int, max_steps: int) -> pd.DataFram
     df = df.filter(pl.col("experiment") == exp_id)
     df = df.sort("zone", "plant_id", "wall_time")
 
-    # Truncate to max_steps timesteps per episode
-    df = df.with_columns(
-        pl.col("wall_time").rank("ordinal").over("zone", "plant_id").alias("_step"),
-    )
-    df = df.filter(pl.col("_step") <= max_steps)
+    # Truncate by calendar day (day is 0-indexed), NOT by raw timestep count.
+    # `day < max_steps` keeps days 0..max_steps-1 regardless of subsampling
+    # cadence: for daily data (e.g. E16) this is the same first max_steps rows
+    # as before, but for sub-daily data (e.g. E18 at 4-hourly, ~3 steps/day) a
+    # step-count cutoff would cover only a fraction of the intended days. With
+    # max_steps=14 this is day <= 13, matching plot_e18_return_energy.
+    df = df.filter(pl.col("day") < max_steps)
 
     episodes = df.group_by(["zone", "plant_id"]).agg(
         pl.col("reward").sum().alias("return"),
@@ -62,13 +65,11 @@ def load_episode_metrics(path: Path, exp_id: int, max_steps: int) -> pd.DataFram
             / pl.col("initial_area")
             * 100
         ).alias("pct_area_change"),
-        ((pl.col("final_area") - pl.col("initial_area")) / 100).alias(
-            "abs_area_change"
-        ),
+        (pl.col("final_area") - pl.col("initial_area")).alias("abs_area_change"),
     )
 
     # Drop rows with zero initial area (division issues)
-    episodes = episodes.filter(pl.col("initial_area") > 1.0)
+    episodes = episodes.filter(pl.col("initial_area") > 0.01)
 
     return episodes.to_pandas()
 
@@ -684,13 +685,21 @@ if __name__ == "__main__":
         type=int,
         default=14,
         metavar="S",
-        help="Maximum number of steps to include in the analysis.",
+        help="Maximum number of DAYS to include per episode (ranked by day, so "
+        "robust to sub-daily subsampling; e.g. 14 keeps days 0-13).",
     )
     parser.add_argument(
         "--experiment",
         type=str,
         default="16",
         help="Experiment ID to plot, or 'all' to run all experiments in the dataset.",
+    )
+    parser.add_argument(
+        "--zone",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Optional: include only these zone IDs (space-separated), e.g. --zone 1 2 3",
     )
     parser.add_argument(
         "--drop-iqr-outliers",
@@ -721,6 +730,15 @@ if __name__ == "__main__":
 
         pdf = load_episode_metrics(parquet_path, exp_id, args.max_steps)
         print(f"Loaded {len(pdf)} plant episodes from E{exp_id}")
+
+        # Optional: filter by zone(s)
+        if args.zone is not None:
+            before = len(pdf)
+            selected_zones = args.zone
+            pdf = pdf.loc[pdf["zone"].isin(selected_zones)].reset_index(drop=True)
+            print(
+                f"Filtered to zones {selected_zones}: excluded {before - len(pdf)} plants, {len(pdf)} remain"
+            )
 
         if len(pdf) == 0:
             print(f"  No data for E{exp_id}, skipping.")

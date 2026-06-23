@@ -146,7 +146,7 @@ def main():
     logging.info(f"Found {growth_df.shape[0]} plants with both initial and final area")
 
     # Filter out plants with zero or very small initial area to avoid division issues
-    min_initial_area = 1.0  # Minimum initial area to consider
+    min_initial_area = 0.01  # cm²; skip near-zero initial areas
     growth_df = growth_df.filter(pl.col("initial_area") > min_initial_area)
     logging.info(f"After filtering small initial areas: {growth_df.shape[0]} plants")
 
