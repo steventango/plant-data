@@ -17,12 +17,6 @@ class MockEnv(gym.Env):
     ):
         super().__init__()
         self.df = df.sort("experiment", "zone", "plant_id", "time")
-        self.episode_keys = (
-            df.select(["experiment", "zone", "plant_id"])
-            .unique()
-            .sort(["experiment", "zone", "plant_id"])
-            .rows()
-        )
         self.current_episode_index = 0
         self.current_episode_key = None
         self.current_row_index = 0
@@ -94,7 +88,6 @@ class MockEnv(gym.Env):
         )
         if self.action_cols is not None:
             # Parameterized action: bounds from normalization stats (data min/max)
-            n_act = len(self.action_cols)
             lows = np.array(
                 [stats.get(c, {}).get("min", 0.0) for c in self.action_cols],
                 dtype=np.float32,
@@ -229,17 +222,6 @@ class MockEnv(gym.Env):
             while self.current_episode_index < len(self.episode_keys):
                 candidate_key = self.episode_keys[self.current_episode_index]
                 self.current_episode_index += 1
-
-                # ensure rows > 1:
-                if (
-                    self.df.filter(
-                        (pl.col("experiment") == candidate_key[0])
-                        & (pl.col("zone") == candidate_key[1])
-                        & (pl.col("plant_id") == candidate_key[2])
-                    ).height
-                    < 2
-                ):
-                    continue
 
                 if candidate_key not in self.completed_episodes:
                     self.current_episode_key = candidate_key
