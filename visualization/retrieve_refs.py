@@ -4,8 +4,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from visualization.common import RESULTS_DIR
+
 GENERATE_SCRIPT = Path("generate.sh")
-OUTPUT_DIR = Path("reference_images")
+OUTPUT_DIR = RESULTS_DIR / "reference_images"
 
 
 def get_zone_paths():

@@ -6,11 +6,8 @@ Spectra are weighted by daily action coefficients (red/white/blue mixing).
 
 import io
 import re
-import sys
 import tarfile
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,12 +15,6 @@ import pandas as pd
 import polars as pl
 
 from config import VERSION
-from visualization.plot_e16_metrics import (
-    AGENT_COLORS,
-    AGENT_ORDER,
-    ZONE_COLORS,
-    ZONE_MAP,
-)
 
 PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
 SPECTRA_PATH = Path(__file__).resolve().parent.parent / "data" / "spectra.tar.gz"
@@ -119,7 +110,15 @@ def compute_weighted_spectra(
     return weighted
 
 
-def draw(weighted: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: Path):
+def draw(
+    weighted: dict[int, np.ndarray],
+    wavelengths: np.ndarray,
+    agent_order,
+    zone_map,
+    agent_colors,
+    zone_colors,
+    output_dir: Path,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.family": "sans-serif"})
 
@@ -129,8 +128,8 @@ def draw(weighted: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: P
     vmin = min(w.min() for w in weighted.values())
     vmax = max(w.max() for w in weighted.values())
 
-    for row_i, agent in enumerate(AGENT_ORDER):
-        zones = ZONE_MAP[agent]
+    for row_i, agent in enumerate(agent_order):
+        zones = zone_map[agent]
         for col_i, zone in enumerate(zones):
             ax = axes[row_i, col_i]
             data = weighted[zone]
@@ -153,7 +152,7 @@ def draw(weighted: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: P
                 f"Zone {zone}",
                 fontsize=10,
                 fontweight="bold",
-                color=ZONE_COLORS[zone],
+                color=zone_colors[zone],
             )
             # Row label — use text annotation to avoid collision with tick labels
             if col_i == 0:
@@ -166,7 +165,7 @@ def draw(weighted: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: P
                     textcoords="offset points",
                     fontsize=10,
                     fontweight="bold",
-                    color=AGENT_COLORS[agent],
+                    color=agent_colors[agent],
                     ha="center",
                     va="center",
                     rotation=90,
@@ -211,4 +210,17 @@ if __name__ == "__main__":
     print(f"Loaded daily coefficients: {len(daily_coefs)} zone-day rows")
 
     weighted = compute_weighted_spectra(spectra, daily_coefs)
-    draw(weighted, wavelengths, Path(args.output))
+
+    from visualization.plot_e16_metrics import build_layout, load_episode_metrics
+
+    pdf = load_episode_metrics(Path(args.parquet), exp_id=16, max_steps=13)
+    agent_order, zone_map, agent_colors, zone_colors, agent_bg = build_layout(pdf)
+    draw(
+        weighted,
+        wavelengths,
+        agent_order,
+        zone_map,
+        agent_colors,
+        zone_colors,
+        Path(args.output),
+    )

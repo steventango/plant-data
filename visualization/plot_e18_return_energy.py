@@ -22,35 +22,10 @@ import pandas as pd
 import polars as pl
 import seaborn as sns
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import E18_POLICY_MAP, VERSION
+from visualization.style import PARETO_COLOR, build_palette
 
 SCHEMA_A_BETAS = [0.5, 1.0, 2.0, 4.0, 8.0]
-
-_TOL_RAINBOW_11 = [
-    "#882E72",
-    "#1965B0",
-    "#7BAFDE",
-    "#4EB265",
-    "#CAE0AB",
-    "#F7CB45",
-    "#EE8026",
-    "#E65518",
-    "#DC050C",
-    "#72190E",
-    "#42150A",
-]
-PARETO_COLOR = "#2C4875"
-
-
-def _build_palette(n: int) -> list[str]:
-    try:
-        import tol_colors as tc
-        import matplotlib.colors as mcolors
-
-        return [mcolors.to_hex(c) for c in tc.rainbow_discrete(n).colors]
-    except ImportError:
-        return [_TOL_RAINBOW_11[i % len(_TOL_RAINBOW_11)] for i in range(n)]
 
 
 def percentile_bounds(x: np.ndarray, lo_pct: float = 15, hi_pct: float = 100):
@@ -333,7 +308,7 @@ def main():
     policy_labels = [policy_label(p) for p in policy_order]
     policy_to_y = {p: i for i, p in enumerate(policy_order)}
 
-    palette = _build_palette(len(policy_order))
+    palette = build_palette(len(policy_order))
     color_map = dict(zip(policy_order, palette))
 
     # Main return column: combined RL reward (area_reward − energy_reward_a_1)

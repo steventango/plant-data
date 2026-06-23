@@ -11,7 +11,6 @@ Schema B (beat-Constant gate):
 """
 
 import argparse
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -20,8 +19,8 @@ import pandas as pd
 import polars as pl
 import seaborn as sns
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from config import E18_POLICY_MAP, VERSION  # noqa: E402
+from config import E18_POLICY_MAP
+from visualization.common import default_parquet
 
 SCHEMA_B_FAIL_ENERGY_MULT = 2.0
 SCHEMA_B_GROWTH_FRAC = 0.95
@@ -149,7 +148,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
     )
     parser.add_argument(
         "--out",

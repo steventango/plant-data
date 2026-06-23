@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from config import E18_POLICY_MAP, VERSION
+from config import E18_POLICY_MAP
+from visualization.common import default_parquet
 
 # Slide-style palette (slides/scripts/make_slide_figures.py / make_film_strip.py).
 BG = "#FAFAF7"
@@ -48,7 +48,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
         help="Path to parquet file",
     )
     parser.add_argument(

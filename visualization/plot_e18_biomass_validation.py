@@ -3,7 +3,6 @@
 
 import argparse
 import re
-import sys
 from datetime import time
 from pathlib import Path
 
@@ -14,8 +13,8 @@ import polars as pl
 import seaborn as sns
 from scipy import stats
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from config import E18_POLICY_MAP, VERSION, tzinfo
+from config import E18_POLICY_MAP, tzinfo
+from visualization.common import default_parquet
 
 BIOMASS_CSV = "Plant RL Schedule 2026 - Biomass (Fresh Weight) 2026.06.15.csv"
 FINAL_TIME = time(1, 0, tzinfo=tzinfo)
@@ -72,7 +71,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
     )
     parser.add_argument(
         "--biomass-csv",

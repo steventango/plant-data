@@ -1,3 +1,4 @@
+import argparse
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,8 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    pca_model_path = "/data/plant-rl/offline/v22/pca_model.joblib"
-    output_path = "results/pca_variance.png"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model", default="/data/plant-rl/offline/v22/pca_model.joblib"
+    )
+    parser.add_argument("--output", default="results/pca_variance.png")
+    args = parser.parse_args()
+    pca_model_path = args.model
+    output_path = args.output
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     logger.info(f"Loading PCA model from {pca_model_path}...")

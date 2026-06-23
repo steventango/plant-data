@@ -4,13 +4,15 @@ from pathlib import Path
 import argparse
 import datetime
 
+from visualization.common import default_parquet
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--parquet",
         "-p",
-        default="/data/plant-rl/offline/v21/mixed-v21.parquet",
+        default=default_parquet(),
         help="Path to parquet file",
     )
     parser.add_argument(
@@ -35,6 +37,12 @@ def main():
         "-o",
         default="results/retrieved_images",
         help="Output directory for retrieved images",
+    )
+    parser.add_argument(
+        "--target-area",
+        type=float,
+        default=None,
+        help="If set, include area value in output filename",
     )
     args = parser.parse_args()
     parquet_file = args.parquet

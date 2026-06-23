@@ -4,10 +4,7 @@ Scatter with regression line, Pearson r, and per-agent colouring.
 Uses weighted average PPFD based on action coefficients from the dataset.
 """
 
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,12 +13,7 @@ import polars as pl
 from scipy import stats as sp_stats
 
 from config import VERSION
-from visualization.plot_e16_metrics import (
-    AGENT_COLORS,
-    AGENT_ORDER,
-    ZONE_MAP,
-    load_e16_episode_metrics,
-)
+from visualization.plot_e16_metrics import build_layout, load_episode_metrics
 
 PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
 PPFD_PATH = Path(__file__).resolve().parent.parent / "data" / "ppfd.csv"
@@ -111,7 +103,14 @@ def load_ppfd(path: Path, zone_coefs: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def draw(pdf: pd.DataFrame, ppfd: pd.DataFrame, output_dir: Path):
+def draw(
+    pdf: pd.DataFrame,
+    ppfd: pd.DataFrame,
+    agent_order,
+    zone_map,
+    agent_colors,
+    output_dir: Path,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     merged = pdf.merge(ppfd, on="zone")
@@ -120,21 +119,21 @@ def draw(pdf: pd.DataFrame, ppfd: pd.DataFrame, output_dir: Path):
     plt.rcParams.update({"font.family": "sans-serif"})
 
     zone_to_agent = {}
-    for ag in AGENT_ORDER:
-        for z in ZONE_MAP[ag]:
+    for ag in agent_order:
+        for z in zone_map[ag]:
             zone_to_agent[z] = ag
 
     ppfd_col, ppfd_label = "ppfd_sun", "PPFD Sun (μmol/m²/s)"
     if True:
         # Scatter per agent
-        for ag in AGENT_ORDER:
+        for ag in agent_order:
             mask = merged["agent"] == ag
             ax.scatter(
                 merged.loc[mask, ppfd_col],
                 merged.loc[mask, "return"],
                 s=12,
                 alpha=0.45,
-                color=AGENT_COLORS[ag],
+                color=agent_colors[ag],
                 label=ag.replace("_", " "),
                 edgecolors="white",
                 linewidths=0.2,
@@ -172,7 +171,7 @@ def draw(pdf: pd.DataFrame, ppfd: pd.DataFrame, output_dir: Path):
                 row["return_mean"],
                 s=60,
                 marker="D",
-                color=AGENT_COLORS.get(ag, "gray"),
+                color=agent_colors.get(ag, "gray"),
                 edgecolors="black",
                 linewidths=0.8,
                 zorder=5,
@@ -221,8 +220,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    pdf = load_e16_episode_metrics(Path(args.parquet))
+    pdf = load_episode_metrics(Path(args.parquet), exp_id=16, max_steps=13)
     print(f"Loaded {len(pdf)} plant episodes from E16")
+    agent_order, zone_map, agent_colors, zone_colors, agent_bg = build_layout(pdf)
+
     if args.min_return is not None:
         before = len(pdf)
         pdf = pdf.loc[pdf["return"] >= args.min_return].reset_index(drop=True)
@@ -234,4 +235,4 @@ if __name__ == "__main__":
     zone_coefs = load_zone_action_coefficients(Path(args.parquet))
     ppfd = load_ppfd(Path(args.ppfd), zone_coefs)
     print(f"Loaded PPFD data for {len(ppfd)} zones")
-    draw(pdf, ppfd, Path(args.output))
+    draw(pdf, ppfd, agent_order, zone_map, agent_colors, Path(args.output))

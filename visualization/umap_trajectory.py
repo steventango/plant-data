@@ -1,19 +1,17 @@
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from PIL import Image
 from umap import UMAP
 
-import sys
-
-sys.path.append(str(Path(__file__).parent.parent))
 from transforms.normalization import load_normalization_stats
+from visualization.common import RESULTS_DIR
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -303,7 +301,9 @@ def main():
         help="Comma-separated experiment:zone pairs",
     )
     parser.add_argument(
-        "--output", type=str, default="umap_trajectory_E14_all_zones.png"
+        "--output",
+        type=str,
+        default=str(RESULTS_DIR / "umap_trajectory_E14_all_zones.png"),
     )
     parser.add_argument(
         "--max_samples", type=int, default=30000, help="Limit total samples for speed"

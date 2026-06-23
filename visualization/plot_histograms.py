@@ -1,12 +1,9 @@
+import os
+
+import matplotlib.pyplot as plt
 import minari
 import numpy as np
 import seaborn as sns
-import matplotlib.pyplot as plt
-import os
-import sys
-
-# Add project root to path to import config
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def main():
@@ -69,7 +66,7 @@ def main():
         axes[i].axis("off")
 
     plt.tight_layout()
-    plt.savefig("results/histograms_obs_stats.png", dpi=150)
+    plt.savefig("results/histograms_obs_stats.png", dpi=200)
     plt.close()
 
     # 2. Plot histograms for actions and rewards
@@ -86,7 +83,7 @@ def main():
     axes[n_action_dims].set_xlabel("Value")
 
     plt.tight_layout()
-    plt.savefig("results/histograms_actions_rewards.png", dpi=150)
+    plt.savefig("results/histograms_actions_rewards.png", dpi=200)
     plt.close()
 
     # 3. Plot a summary of embedding dimensions (mean, std, or range of distributions)
@@ -107,7 +104,7 @@ def main():
     axes[1].set_xlabel("Mean Value")
 
     plt.tight_layout()
-    plt.savefig("results/histograms_embeddings_summary.png", dpi=150)
+    plt.savefig("results/histograms_embeddings_summary.png", dpi=200)
     plt.close()
 
     # 4. Investigate Embedding Variance
@@ -138,7 +135,7 @@ def main():
         ax.set_xlabel("Value")
 
     plt.tight_layout()
-    plt.savefig("results/histograms_embeddings_low_variance.png", dpi=150)
+    plt.savefig("results/histograms_embeddings_low_variance.png", dpi=200)
     plt.close()
 
     # Plot a random sample of 16 embedding dimensions for comparison
@@ -154,7 +151,7 @@ def main():
         ax.set_xlabel("Value")
 
     plt.tight_layout()
-    plt.savefig("results/histograms_embeddings_random_sample.png", dpi=150)
+    plt.savefig("results/histograms_embeddings_random_sample.png", dpi=200)
     plt.close()
 
     print("\nEmbedding variance analysis plots saved to 'results/'.")

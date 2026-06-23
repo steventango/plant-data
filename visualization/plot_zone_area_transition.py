@@ -6,18 +6,15 @@ For each zone, fit a linear model y = m*x + b and annotate slope/intercept.
 
 import argparse
 import math
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
-from config import VERSION
+from visualization.common import default_parquet
 
-PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
+PARQUET_PATH = Path(default_parquet())
 OUTPUT_DIR = Path("results/zone_area_transition")
 RED_ZONES = [1, 2, 5, 6, 9, 10]
 BLUE_ZONES = [3, 4, 7, 8, 11, 12]

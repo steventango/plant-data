@@ -6,11 +6,8 @@ Brackets: within-agent zone pairs (zone effect) and between-agent pairs (agent e
 Statistical decomposition: nested Welch's ANOVA (agent, zone-within-agent) printed per metric.
 """
 
-import sys
 from itertools import combinations
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +16,7 @@ import polars as pl
 from scipy import stats as sp_stats
 
 from config import VERSION
+from visualization.style import PALETTE_BASE, PALETTE_BG, PALETTE_SHADES
 
 # ── Configurable paths ──────────────────────────────────────────────────────
 PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
@@ -75,39 +73,6 @@ def load_episode_metrics(path: Path, exp_id: int, max_steps: int) -> pd.DataFram
 
 
 # ── Layout builder (dynamic from data) ──────────────────────────────────────
-# Preset palette: base colour + 3 shades (light → dark) per agent slot
-_PALETTE_BASE = [
-    "#4e9ac7",
-    "#e85c4a",
-    "#6fbf3e",
-    "#a050b0",
-    "#e89c2a",
-    "#2ab0a0",
-    "#c06030",
-    "#8080c0",
-]
-_PALETTE_SHADES = [
-    ["#a8d4ef", "#4e9ac7", "#1e6a96"],
-    ["#f4a99e", "#e85c4a", "#b52c1e"],
-    ["#b5e089", "#6fbf3e", "#3a8a1a"],
-    ["#d9a8e8", "#a050b0", "#6a2080"],
-    ["#f7d49a", "#e89c2a", "#a06000"],
-    ["#9adfd8", "#2ab0a0", "#0a7a70"],
-    ["#e8b898", "#c06030", "#803010"],
-    ["#c0c0e8", "#8080c0", "#404090"],
-]
-_PALETTE_BG = [
-    "#eaf4fb",
-    "#fdecea",
-    "#eef9e6",
-    "#f5eafb",
-    "#fef6e8",
-    "#e8f9f7",
-    "#faeee8",
-    "#eeeef8",
-]
-
-
 def build_layout(pdf: pd.DataFrame):
     """Derive agent_order, zone_map, and colour dicts from data."""
     # Sort agents: put Constant_White first if present, then alphabetical
@@ -128,10 +93,10 @@ def build_layout(pdf: pd.DataFrame):
     zone_colors: dict[int, str] = {}
     agent_bg = {}
     for ai, ag in enumerate(agent_order):
-        idx = ai % len(_PALETTE_BASE)
-        agent_colors[ag] = _PALETTE_BASE[idx]
-        agent_bg[ag] = _PALETTE_BG[idx]
-        shades = _PALETTE_SHADES[idx]
+        idx = ai % len(PALETTE_BASE)
+        agent_colors[ag] = PALETTE_BASE[idx]
+        agent_bg[ag] = PALETTE_BG[idx]
+        shades = PALETTE_SHADES[idx]
         for zi, z in enumerate(zone_map[ag]):
             zone_colors[z] = shades[min(zi, len(shades) - 1)]
 

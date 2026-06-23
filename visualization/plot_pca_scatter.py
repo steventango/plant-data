@@ -1,3 +1,4 @@
+import argparse
 import polars as pl
 import numpy as np
 import joblib
@@ -25,10 +26,18 @@ def load_image(path, target_size=(64, 64)):
 
 
 def main():
-    # Paths
-    input_path = "/data/plant-rl/offline/v23/mixed-v23.parquet"
-    pca_model_path = "/data/plant-rl/offline/v23/pca_model.joblib"
-    output_dir = "results/pca_scatter"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input", default="/data/plant-rl/offline/v23/mixed-v23.parquet"
+    )
+    parser.add_argument(
+        "--model", default="/data/plant-rl/offline/v23/pca_model.joblib"
+    )
+    parser.add_argument("--output-dir", default="results/pca_scatter")
+    args = parser.parse_args()
+    input_path = args.input
+    pca_model_path = args.model
+    output_dir = args.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
     K = 10

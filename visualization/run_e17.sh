@@ -4,7 +4,7 @@ set -euo pipefail
 # ── E17 metrics plot ──────────────────────────────────────────────────────────
 echo "=== Plotting E17 metrics ==="
 for max_steps in 2 3 4 5 6 7 8 13 14; do
-    uv run python visualization/plot_e16_metrics.py \
+    uv run python -m visualization.plot_e16_metrics \
         --experiment 17 \
         --output results/e17_metrics_${max_steps} \
         --min-return 0.01 \
@@ -12,7 +12,7 @@ for max_steps in 2 3 4 5 6 7 8 13 14; do
         --iqr-multiplier 1.0 \
         --max-steps ${max_steps}
 done
-uv run python visualization/plot_e16_metrics.py \
+uv run python -m visualization.plot_e16_metrics \
     --experiment 17 \
     --output results/e17_metrics_14 \
     --min-return 0.01 \
@@ -29,7 +29,7 @@ mkdir -p results/timelapses/E17
 
 for ZONE in "${ZONES[@]}"; do
     echo "Creating timelapse for E17 Zone $ZONE..."
-    uv run python visualization/create_timelapse.py \
+    uv run python -m visualization.create_timelapse \
         --parquet "$PARQUET" \
         --experiment 17 \
         --zone "$ZONE" \
@@ -43,7 +43,7 @@ tar -czvf results/E17_timelapses.tar.gz results/timelapses/E17
 
 # ── E17 frame strip ──────────────────────────────────────────────────────────
 echo "=== Creating E17 frame strip ==="
-uv run python visualization/create_frame_strip.py \
+uv run python -m visualization.create_frame_strip \
     --experiment 13 \
     --out results/e17_frame_strip.jpg
 
@@ -51,6 +51,6 @@ echo "=== Done ==="
 
 
 # -- Plot reward over time for E17 with different max steps
-uv run python visualization/plot_reward_over_time.py \
+uv run python -m visualization.plot_reward_over_time \
     --experiment 17 \
     --max-steps 13

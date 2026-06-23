@@ -8,21 +8,19 @@ Shows per-zone trajectories (mean ± 95% CI across plants) for:
   - Daily energy (Wh)
 """
 
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import E18_POLICY_MAP, VERSION
+from visualization.style import E18_ZONE_COLORS as ZONE_COLORS
 
 PARQUET = Path(f"/data/plant-rl/offline/{VERSION}/mixed-e18-daily-v27.parquet")
 OUTPUT = Path("results/e18_daily_dataset_verification.png")
 
 ZONE_ORDER = [1, 3, 4, 11]
-ZONE_COLORS = {1: "#e74c3c", 3: "#3498db", 4: "#2ecc71", 11: "#9b59b6"}
 
 
 def bootstrap_ci(vals: np.ndarray, n_boot: int = 2000, ci: float = 0.95, seed: int = 0):

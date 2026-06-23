@@ -8,7 +8,6 @@ import datetime
 import io
 import logging
 import re
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -19,9 +18,7 @@ from PIL import Image, ImageDraw
 
 matplotlib.use("Agg")
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
-from config import VERSION
+from visualization.common import default_parquet
 from visualization.create_mosaic import load_font
 from visualization.plot_e16_metrics import build_layout, load_episode_metrics
 
@@ -282,7 +279,7 @@ def main():
     parser.add_argument(
         "--parquet",
         "-p",
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
     )
     parser.add_argument("--experiment", "-e", type=int, default=16)
     parser.add_argument("--out", "-o", default="results/e16_frame_strip.jpg")

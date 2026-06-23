@@ -9,19 +9,17 @@ Also produces the same two plot types for exp(reward).
 """
 
 import argparse
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import polars as pl
 
-from config import VERSION
+from visualization.common import default_parquet
+from visualization.style import set_theme
 
-PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
+PARQUET_PATH = Path(default_parquet())
 OUTPUT_DIR = Path("results/reward_over_time")
 RED_ZONES = {1, 2, 5, 6, 9, 10}
 BLUE_ZONES = {3, 4, 7, 8, 11, 12}
@@ -112,7 +110,6 @@ def draw_zone_agent(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(12, 7))
-    plt.rcParams.update({"font.family": "sans-serif"})
 
     combos = (
         summary[["agent", "zone"]]
@@ -167,7 +164,6 @@ def draw_red_blue(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(9, 6))
-    plt.rcParams.update({"font.family": "sans-serif"})
 
     colors = {"red": "#d62728", "blue": "#1f77b4"}
     labels = {"red": "Red zones (1,2,5,6,9,10)", "blue": "Blue zones (3,4,7,8,11,12)"}
@@ -210,7 +206,6 @@ def draw_agent_only(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    plt.rcParams.update({"font.family": "sans-serif"})
 
     agents = sorted(summary["agent"].dropna().unique().tolist())
     cmap = plt.get_cmap("tab10")
@@ -259,6 +254,7 @@ def add_zone_group(pdf: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
+    set_theme()
     parser = argparse.ArgumentParser(
         description="Plot reward-over-time with 95% bootstrap CI (zone+agent and red/blue)."
     )

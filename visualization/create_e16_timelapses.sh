@@ -12,7 +12,7 @@ PARQUET="/data/plant-rl/offline/v24/mixed-v24.parquet"
 # Generate timelapses for each zone
 for ZONE in "${ZONES[@]}"; do
     echo "Creating timelapse for E16 Zone $ZONE..."
-    uv run python visualization/create_timelapse.py \
+    uv run python -m visualization.create_timelapse \
         --parquet "$PARQUET" \
         --experiment 16 \
         --zone "$ZONE" \

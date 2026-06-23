@@ -3,27 +3,16 @@ Plot action coefficient weights over time for E16.
 4×3 stacked bar chart grid (agents × zones): x = day, y = coefficient value, colour = R/W/B.
 """
 
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import polars as pl
 
 from config import VERSION
-from visualization.plot_e16_metrics import (
-    AGENT_COLORS,
-    AGENT_ORDER,
-    ZONE_COLORS,
-    ZONE_MAP,
-)
+from visualization.style import COEF_COLORS, COEF_LABELS
 
 PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
 OUTPUT_DIR = Path("results/action_coef_weights")
-
-COEF_COLORS = {"red_coef": "#e63946", "white_coef": "#adb5bd", "blue_coef": "#457b9d"}
-COEF_LABELS = {"red_coef": "Red", "white_coef": "White", "blue_coef": "Blue"}
 
 
 def load_daily_action_coefficients(parquet_path: Path):
@@ -60,7 +49,9 @@ def load_daily_action_coefficients(parquet_path: Path):
     return result.to_pandas()
 
 
-def draw(daily_coefs, output_dir: Path):
+def draw(
+    daily_coefs, agent_order, zone_map, agent_colors, zone_colors, output_dir: Path
+):
     output_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.family": "sans-serif"})
 
@@ -69,8 +60,8 @@ def draw(daily_coefs, output_dir: Path):
     coef_cols = ["red_coef", "white_coef", "blue_coef"]
     legend_handles = []
 
-    for row_i, agent in enumerate(AGENT_ORDER):
-        zones = ZONE_MAP[agent]
+    for row_i, agent in enumerate(agent_order):
+        zones = zone_map[agent]
         for col_i, zone in enumerate(zones):
             ax = axes[row_i, col_i]
             zone_df = daily_coefs[daily_coefs["zone"] == zone].sort_values("day")
@@ -100,7 +91,7 @@ def draw(daily_coefs, output_dir: Path):
                 f"Zone {zone}",
                 fontsize=10,
                 fontweight="bold",
-                color=ZONE_COLORS[zone],
+                color=zone_colors[zone],
             )
             if col_i == 0:
                 ax.set_ylabel("Day", fontsize=9)
@@ -112,7 +103,7 @@ def draw(daily_coefs, output_dir: Path):
                     textcoords="offset points",
                     fontsize=10,
                     fontweight="bold",
-                    color=AGENT_COLORS[agent],
+                    color=agent_colors[agent],
                     ha="center",
                     va="center",
                     rotation=90,
@@ -158,4 +149,10 @@ if __name__ == "__main__":
     daily_coefs = load_daily_action_coefficients(Path(args.parquet))
     print(f"Loaded daily coefficients: {len(daily_coefs)} zone-day rows")
 
-    draw(daily_coefs, Path(args.output))
+    from visualization.plot_e16_metrics import build_layout, load_episode_metrics
+
+    pdf = load_episode_metrics(Path(args.parquet), exp_id=16, max_steps=13)
+    agent_order, zone_map, agent_colors, zone_colors, agent_bg = build_layout(pdf)
+    draw(
+        daily_coefs, agent_order, zone_map, agent_colors, zone_colors, Path(args.output)
+    )

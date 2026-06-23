@@ -4,24 +4,23 @@ import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import polars as pl
 import seaborn as sns
-import numpy as np
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-VERSION = "v21"
+from visualization.common import default_parquet, setup_logging
 
 
 def main():
+    setup_logging()
     parser = argparse.ArgumentParser(
         description="Plot plant area vs time for each experiment and zone."
     )
     parser.add_argument(
         "--parquet",
         "-p",
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
         help="Path to parquet file",
     )
     parser.add_argument(

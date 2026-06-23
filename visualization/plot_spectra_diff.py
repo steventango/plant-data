@@ -3,21 +3,12 @@ Plot diff of weighted light spectra: each zone minus the per-agent average.
 4×3 heatmap grid (agents × zones): x = wavelength, y = day, colour = diff intensity.
 """
 
-import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from config import VERSION
-from visualization.plot_e16_metrics import (
-    AGENT_COLORS,
-    AGENT_ORDER,
-    ZONE_COLORS,
-    ZONE_MAP,
-)
 from visualization.plot_weighted_spectra import (
     SPECTRA_PATH,
     compute_weighted_spectra,
@@ -29,11 +20,13 @@ PARQUET_PATH = Path(f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet")
 OUTPUT_DIR = Path("results/weighted_spectra")
 
 
-def compute_diff(weighted: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
+def compute_diff(
+    weighted: dict[int, np.ndarray], agent_order, zone_map
+) -> dict[int, np.ndarray]:
     """Subtract per-agent mean spectrum (over zones) from each zone."""
     diff = {}
-    for agent in AGENT_ORDER:
-        zones = ZONE_MAP[agent]
+    for agent in agent_order:
+        zones = zone_map[agent]
         # Align days: use min number of days across zones in this agent
         n_days = min(weighted[z].shape[0] for z in zones)
         stack = np.stack(
@@ -45,7 +38,15 @@ def compute_diff(weighted: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
     return diff
 
 
-def draw_diff(diff: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: Path):
+def draw_diff(
+    diff: dict[int, np.ndarray],
+    wavelengths: np.ndarray,
+    agent_order,
+    zone_map,
+    agent_colors,
+    zone_colors,
+    output_dir: Path,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.family": "sans-serif"})
 
@@ -55,8 +56,8 @@ def draw_diff(diff: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: 
     absmax = max(np.abs(d).max() for d in diff.values())
     vmin, vmax = -absmax, absmax
 
-    for row_i, agent in enumerate(AGENT_ORDER):
-        zones = ZONE_MAP[agent]
+    for row_i, agent in enumerate(agent_order):
+        zones = zone_map[agent]
         for col_i, zone in enumerate(zones):
             ax = axes[row_i, col_i]
             data = diff[zone]
@@ -78,7 +79,7 @@ def draw_diff(diff: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: 
                 f"Zone {zone}",
                 fontsize=10,
                 fontweight="bold",
-                color=ZONE_COLORS[zone],
+                color=zone_colors[zone],
             )
             if col_i == 0:
                 ax.set_ylabel("Day", fontsize=9)
@@ -90,7 +91,7 @@ def draw_diff(diff: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: 
                     textcoords="offset points",
                     fontsize=10,
                     fontweight="bold",
-                    color=AGENT_COLORS[agent],
+                    color=agent_colors[agent],
                     ha="center",
                     va="center",
                     rotation=90,
@@ -134,5 +135,18 @@ if __name__ == "__main__":
     print(f"Loaded daily coefficients: {len(daily_coefs)} zone-day rows")
 
     weighted = compute_weighted_spectra(spectra, daily_coefs)
-    diff = compute_diff(weighted)
-    draw_diff(diff, wavelengths, Path(args.output))
+
+    from visualization.plot_e16_metrics import build_layout, load_episode_metrics
+
+    pdf = load_episode_metrics(Path(args.parquet), exp_id=16, max_steps=13)
+    agent_order, zone_map, agent_colors, zone_colors, agent_bg = build_layout(pdf)
+    diff = compute_diff(weighted, agent_order, zone_map)
+    draw_diff(
+        diff,
+        wavelengths,
+        agent_order,
+        zone_map,
+        agent_colors,
+        zone_colors,
+        Path(args.output),
+    )

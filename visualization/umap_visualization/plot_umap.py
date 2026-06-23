@@ -10,7 +10,7 @@ import polars as pl
 from PIL import Image
 from umap import UMAP
 
-import visualization.umap.visualize as visualize
+from visualization.umap_visualization import visualize
 
 logger = logging.getLogger(__name__)
 

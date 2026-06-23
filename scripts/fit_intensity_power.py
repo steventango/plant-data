@@ -37,9 +37,9 @@ sys.path.append(str(ROOT))
 
 from config import VERSION  # noqa: E402
 from visualization.e18_power import PHOTOPERIOD_HOURS, daily_power_energy  # noqa: E402
+from visualization.style import E18_ZONE_COLORS as ZONE_COLORS  # noqa: E402
 
 PARQUET = ROOT / f"/data/plant-rl/offline/{VERSION}/mixed-e18-daily-v27.parquet"
-ZONE_COLORS = {1: "#e74c3c", 3: "#3498db", 4: "#2ecc71", 11: "#9b59b6"}
 
 
 def main():

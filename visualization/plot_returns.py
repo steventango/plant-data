@@ -1,16 +1,12 @@
 import argparse
-import sys
 from pathlib import Path
-
-# Add project root to sys.path to import config.py
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
 
-from config import VERSION
 from transforms.attributes import get_agent_name
+from visualization.common import RESULTS_DIR, default_parquet
 
 
 def plot_returns(parquet_path: Path):
@@ -136,7 +132,7 @@ def plot_returns(parquet_path: Path):
     plt.ylabel("Return")
 
     plt.tight_layout()
-    output_path = "return_violinplot_by_agent.png"
+    output_path = str(RESULTS_DIR / "return_violinplot_by_agent.png")
     plt.savefig(output_path)
     print(f"Plot saved to '{output_path}'")
 
@@ -148,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--parquet",
         type=str,
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
         help="Path to the parquet file",
     )
     args = parser.parse_args()

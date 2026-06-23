@@ -7,19 +7,18 @@ import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-VERSION = "v17"
+from visualization.common import default_parquet, setup_logging
 
 
 def main():
+    setup_logging()
     parser = argparse.ArgumentParser(
         description="Plot initial plant area distribution for a specific experiment and zone."
     )
     parser.add_argument(
         "--parquet",
         "-p",
-        default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
+        default=default_parquet(),
         help="Path to parquet file",
     )
     parser.add_argument(
