@@ -279,7 +279,7 @@ def main():
     df = pl.read_parquet(args.parquet)
 
     # Build agent order and zone map from data
-    pdf = load_episode_metrics(Path(args.parquet), args.experiment)
+    pdf = load_episode_metrics(Path(args.parquet), args.experiment, args.max_day + 1)
     agent_order, zone_map, _, _, _ = build_layout(pdf)
     logging.info(f"Agents: {agent_order}, Zone map: {zone_map}")
 
