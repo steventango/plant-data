@@ -1,6 +1,8 @@
 from datetime import date
 import polars as pl
 
+from config import E18_POLICY_MAP
+
 
 EXPERIMENT_EVENTS = {
     7: {
@@ -200,6 +202,8 @@ def get_agent_name(df: pl.DataFrame) -> pl.DataFrame:
             .then(pl.lit("BlueBlue"))
             .otherwise(pl.lit("Other"))
         )
+        .when(pl.col("experiment") == 18)
+        .then(pl.col("zone").replace_strict(E18_POLICY_MAP, default="Other"))
         .otherwise(pl.lit("Other"))
         .alias("agent")
     )
