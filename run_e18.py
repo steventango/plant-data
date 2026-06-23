@@ -21,9 +21,9 @@ def run_cmd(cmd: list[str], description: str) -> None:
 def main():
     root_dir = Path(__file__).resolve().parent
     parquet_path = "/data/plant-rl/offline/v27/mixed-v27.parquet"
-    zones = [1, 2, 3, 4, 5, 11]
-    max_steps_list = [2, 3, 4, 5, 6, 7, 8]
-    max_day = 8
+    zones = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    max_steps_list = [14]
+    max_day = 14
 
     # 1. Plot E18 Metrics
     print("=== Plotting E18 Metrics ===")
@@ -156,6 +156,8 @@ def main():
             parquet_path,
             "--out",
             "results/e18_return_energy.png",
+            "--out-schemas",
+            "results/e18_return_energy_schemas.png",
         ],
         "Plotting Return and Energy trade-off grouped by Agent for E18",
     )
