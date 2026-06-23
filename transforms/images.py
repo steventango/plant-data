@@ -150,7 +150,27 @@ def process_zone_images(
             timestamp_str = timestamp.strftime("%Y-%m-%dT%H%M%S")
             image_path = img_info["image_path"]
 
-            # Load and encode image
+            # Load and check brightness to skip dark images
+            import numpy as np
+            with Image.open(image_path) as img:
+                img_gray = img.convert("L")
+                mean_brightness = np.mean(np.array(img_gray))
+
+            if mean_brightness < 90.0:
+                logger.info(
+                    f"E{experiment}/zone{zone}: Skipping dark image (brightness {mean_brightness:.2f}): {image_path.name}"
+                )
+                if pots_results:
+                    last_time = pots_results[-1]["time"]
+                    last_frame_pots = [row for row in pots_results if row["time"] == last_time]
+                    current_frame_pots = []
+                    for row in last_frame_pots:
+                        new_row = row.copy()
+                        new_row["time"] = timestamp
+                        current_frame_pots.append(new_row)
+                    pots_results.extend(current_frame_pots)
+                continue
+
             with open(image_path, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
 
