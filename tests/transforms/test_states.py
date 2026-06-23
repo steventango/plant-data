@@ -47,8 +47,8 @@ def test_log_clean_area_computed():
     result = transform_state(df)
 
     assert "log_clean_area" in result.columns
-    assert result["log_clean_area"][0] == 0.0  # log(1) = 0
-    assert pytest.approx(result["log_clean_area"][1]) == 4.61512051684  # log(101)
+    assert result["log_clean_area"][0] is None  # non-positive clean_area → NULL
+    assert pytest.approx(result["log_clean_area"][1]) == 4.60517018599  # log(100)
 
 
 def test_transform_days_since_events():

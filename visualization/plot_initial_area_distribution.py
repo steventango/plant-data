@@ -127,12 +127,12 @@ def main():
 
     data_to_plot = initial_areas.to_pandas()
 
-    sns.histplot(data=data_to_plot, x=area_col, kde=True, binwidth=1)
+    sns.histplot(data=data_to_plot, x=area_col, kde=True, binwidth=0.1)
 
     plt.title(
         f"Distribution of Initial Plant Area\nExperiment: {args.experiment}, Zone: {args.zone}"
     )
-    plt.xlabel("Initial Plant Area")
+    plt.xlabel("Initial Plant Area (cm²)")
     plt.ylabel("Count")
 
     # Add summary stats to the plot

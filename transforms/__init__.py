@@ -1,4 +1,5 @@
 from .actions import transform_action, transform_action_traces
+from .power import transform_power
 from .attributes import get_agent_name, transform_experiment_attributes
 from .images import transform_image_embeddings
 from .labels import import_labels
@@ -17,6 +18,7 @@ from .umap import transform_umap
 __all__ = [
     "transform_action",
     "transform_action_traces",
+    "transform_power",
     "transform_image_embeddings",
     "import_labels",
     "compute_normalization_stats",

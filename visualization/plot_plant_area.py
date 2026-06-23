@@ -216,7 +216,11 @@ def main():
 
         legend_title = "Agent" if args.group_by_agent else "Experiment-Zone"
         plot_title = f"IQM Plant Area vs Wall Time by {legend_title} (95% CI)"
-        ylabel = "IQM Normalized Plant Area" if args.normalize else "IQM Plant Area"
+        ylabel = (
+            "IQM Normalized Plant Area"
+            if args.normalize
+            else "IQM Plant Area (cm²)"
+        )
 
         plt.legend(title=legend_title, bbox_to_anchor=(1.05, 1), loc="upper left")
         plt.tight_layout()
@@ -295,7 +299,7 @@ def main():
 
             plt.title(f"Plant Area vs Wall Time for Experiment {exp}")
             plt.xlabel("Wall Time (days)")
-            plt.ylabel("Plant Area")
+            plt.ylabel("Plant Area (cm²)" if not args.normalize else "Normalized Plant Area")
             plt.xticks(rotation=45)
             plt.tight_layout()
 
