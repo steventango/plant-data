@@ -4,7 +4,7 @@ import numpy as np
 
 
 VERSION = "v27"
-VISION_VERSION = "v6"
+VISION_VERSION = "v7"
 
 GOOD_ZONE_DAYS = {
     "E11/zone1": [1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
@@ -71,9 +71,29 @@ GOOD_ZONE_DAYS = {
     "E16/zone11": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     "E16/zone12": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
 }
+
+E18_POLICY_MAP = {
+    1: "SequencePowerLawRamp",
+    2: "SequenceParabolic",
+    3: "ConstantLow",
+    4: "SequenceSeventyPercentRamp",
+    5: "SequenceLateRamp",
+    6: "SequenceBlueToRedLate",
+    7: "SequenceBlueToRedEarly",
+    8: "ConstantBlue",
+    9: "SequenceRedToBlueEarly",
+    10: "SequenceRedToBlueLate",
+    11: "Constant",
+}
+
 TIMEZONE = "America/Edmonton"
 tzinfo = ZoneInfo(TIMEZONE)
 RED = np.array([9.71409574, 34.97074468, 4.01515957, 0.0, 56.3, 6.13067376])
+
+# Balanced-white spectrum at 100 PPFD — mirrors plant-rl BALANCED_ACTION_100.
+# IntensityAction: commanded_action = BALANCED_ACTION_100 * intensity
+BALANCED_ACTION_105 = np.array([19.5, 71.53, 7.82, 0.0, 6.15, 0.0])
+BALANCED_ACTION_100 = BALANCED_ACTION_105 / BALANCED_ACTION_105[:5].sum() * 100.0
 WHITE = np.array([19.6875, 70.875, 8.1375, 0.0, 6.3, 12.425])
 BLUE = np.array([69.6875, 29.33653846, 3.36826923, 0.0, 2.60769231, 5.14294872])
 
