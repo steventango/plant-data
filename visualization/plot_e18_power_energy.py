@@ -58,7 +58,10 @@ def main():
         help="Output file path for the plot",
     )
     parser.add_argument(
-        "--max-day", type=int, default=13, help="Only plot days <= this index (day 13 is terminal)"
+        "--max-day",
+        type=int,
+        default=13,
+        help="Only plot days <= this index (day 13 is terminal)",
     )
     args = parser.parse_args()
 
@@ -76,7 +79,9 @@ def main():
         .filter(pl.col("day") <= args.max_day)
         .sort("zone", "time")
         .with_columns(
-            pl.col("zone").replace_strict(E18_POLICY_MAP, default="Unknown").alias("policy"),
+            pl.col("zone")
+            .replace_strict(E18_POLICY_MAP, default="Unknown")
+            .alias("policy"),
         )
         .filter(pl.col("policy") != "Unknown")
         .filter(pl.col("energy").is_not_null())
@@ -109,20 +114,40 @@ def main():
         add_night_shading(ax, args.max_day)
 
     sns.lineplot(
-        data=pdf, x="wall_time", y="energy", hue="policy", units="line_id",
-        hue_order=policy_order, palette=palette, estimator=None,
-        ax=axes[0], linewidth=1.5, legend=False,
+        data=pdf,
+        x="wall_time",
+        y="energy",
+        hue="policy",
+        units="line_id",
+        hue_order=policy_order,
+        palette=palette,
+        estimator=None,
+        ax=axes[0],
+        linewidth=1.5,
+        legend=False,
     )
-    axes[0].set_title("Interval Energy by Agent (4-hourly)", fontsize=13, fontweight="bold")
+    axes[0].set_title(
+        "Interval Energy by Agent (4-hourly)", fontsize=13, fontweight="bold"
+    )
     axes[0].set_xlabel("Wall time (days)", fontsize=11)
     axes[0].set_ylabel("Energy over interval (Wh)", fontsize=11)
 
     sns.lineplot(
-        data=pdf, x="wall_time", y="cumulative_energy", hue="policy", units="line_id",
-        hue_order=policy_order, palette=palette, estimator=None,
-        ax=axes[1], linewidth=1.5, legend=False,
+        data=pdf,
+        x="wall_time",
+        y="cumulative_energy",
+        hue="policy",
+        units="line_id",
+        hue_order=policy_order,
+        palette=palette,
+        estimator=None,
+        ax=axes[1],
+        linewidth=1.5,
+        legend=False,
     )
-    axes[1].set_title("Cumulative Energy by Agent (4-hourly)", fontsize=13, fontweight="bold")
+    axes[1].set_title(
+        "Cumulative Energy by Agent (4-hourly)", fontsize=13, fontweight="bold"
+    )
     axes[1].set_xlabel("Wall time (days)", fontsize=11)
     axes[1].set_ylabel("Cumulative energy (Wh)", fontsize=11)
 

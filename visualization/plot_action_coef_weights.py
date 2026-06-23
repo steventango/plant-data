@@ -43,10 +43,7 @@ def load_daily_action_coefficients(parquet_path: Path):
 
     MAX_ACTIONS = 13
     df = df.with_columns(
-        pl.col("wall_time")
-        .rank("ordinal")
-        .over("zone", "plant_id")
-        .alias("_step"),
+        pl.col("wall_time").rank("ordinal").over("zone", "plant_id").alias("_step"),
     )
     df = df.filter(pl.col("_step") <= MAX_ACTIONS)
     df = df.with_columns((pl.col("_step") - 1).alias("day"))

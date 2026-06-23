@@ -36,7 +36,9 @@ def compute_diff(weighted: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
         zones = ZONE_MAP[agent]
         # Align days: use min number of days across zones in this agent
         n_days = min(weighted[z].shape[0] for z in zones)
-        stack = np.stack([weighted[z][:n_days] for z in zones], axis=0)  # (n_zones, days, wl)
+        stack = np.stack(
+            [weighted[z][:n_days] for z in zones], axis=0
+        )  # (n_zones, days, wl)
         mean = stack.mean(axis=0)  # (days, wl)
         for z in zones:
             diff[z] = weighted[z][:n_days] - mean

@@ -160,8 +160,8 @@ def main():
         "--output-name",
         type=str,
         default=None,
-        help=f"Base name for output files (default: mixed-{{VERSION}}). "
-        f"Files written: <name>.parquet, normalization-stats-<name>.json.",
+        help="Base name for output files (default: mixed-{VERSION}). "
+        "Files written: <name>.parquet, normalization-stats-<name>.json.",
     )
     args = parser.parse_args()
 
@@ -257,13 +257,17 @@ def main():
             df = df.filter(pl.col("intensity") > 0)
             dropped = before - df.height
             if dropped:
-                logging.warning(f"Dropped {dropped} zero-intensity rows (lights off at 9:00 AM)")
+                logging.warning(
+                    f"Dropped {dropped} zero-intensity rows (lights off at 9:00 AM)"
+                )
 
         # ----- Energy-reward columns -----
         # Reference constants derived from Zone 11 (Constant baseline)
         z11_df = df.filter(pl.col("zone") == 11)
         if z11_df.is_empty() or z11_df["energy"].drop_nulls().len() == 0:
-            logging.warning("Zone 11 not in dataset; using dataset-wide energy/reward baselines")
+            logging.warning(
+                "Zone 11 not in dataset; using dataset-wide energy/reward baselines"
+            )
             e_const = float(df["energy"].drop_nulls().mean())
             r_const = float(df["reward"].drop_nulls().mean())
         else:
@@ -338,8 +342,14 @@ def main():
     full_stats = compute_normalization_stats(df)
 
     # Add stats for any action columns not in COLS (e.g. intensity, energy_reward_*)
-    extra_reward_cols = [f"energy_reward_schema_a_{b:g}" for b in [0.5, 1.0, 2.0, 4.0, 8.0]]
-    for extra_col in ["intensity", "area_reward", "energy_reward_schema_b"] + extra_reward_cols:
+    extra_reward_cols = [
+        f"energy_reward_schema_a_{b:g}" for b in [0.5, 1.0, 2.0, 4.0, 8.0]
+    ]
+    for extra_col in [
+        "intensity",
+        "area_reward",
+        "energy_reward_schema_b",
+    ] + extra_reward_cols:
         if extra_col in df.columns and extra_col not in full_stats:
             col_series = df[extra_col].drop_nulls().drop_nans()
             if col_series.len() > 0:

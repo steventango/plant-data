@@ -120,7 +120,9 @@ def paste_thumbnail(
         logging.warning(f"Failed to load {img_path}: {e}")
 
 
-def load_zone_actions(zone_root: Path, ref_time_utc: datetime.datetime) -> tuple[list, list, list, list]:
+def load_zone_actions(
+    zone_root: Path, ref_time_utc: datetime.datetime
+) -> tuple[list, list, list, list]:
     """Load raw action coefficients at full 5-min resolution from raw CSVs (vectorized)."""
     from config import BLUE as BLUE_VEC
     from config import RED as RED_VEC
@@ -130,7 +132,14 @@ def load_zone_actions(zone_root: Path, ref_time_utc: datetime.datetime) -> tuple
     if not csv_files:
         return [], [], [], []
 
-    action_cols = ["action.0", "action.1", "action.2", "action.3", "action.4", "action.5"]
+    action_cols = [
+        "action.0",
+        "action.1",
+        "action.2",
+        "action.3",
+        "action.4",
+        "action.5",
+    ]
     dfs = []
     for f in csv_files:
         try:
@@ -151,7 +160,9 @@ def load_zone_actions(zone_root: Path, ref_time_utc: datetime.datetime) -> tuple
 
     # Compute wall_time as float days from ref_time
     ref_epoch_us = int(ref_time_utc.timestamp() * 1e6)
-    wt_arr = (combined["time"].dt.epoch(time_unit="us") - ref_epoch_us) / (86400.0 * 1e6)
+    wt_arr = (combined["time"].dt.epoch(time_unit="us") - ref_epoch_us) / (
+        86400.0 * 1e6
+    )
 
     # Build (N, 6) action matrix
     A = np.column_stack([combined[c].to_numpy().astype(float) for c in action_cols])
@@ -236,9 +247,21 @@ def render_actions_strip(
             ax.bar(x, 1.0, width=bar_w, align="edge", color="black", linewidth=0)
         else:
             r, w, b = r_vals[i], w_vals[i], b_vals[i]
-            ax.bar(x, r,         width=bar_w, align="edge", bottom=0,       color="#e05050", linewidth=0)
-            ax.bar(x, w,         width=bar_w, align="edge", bottom=r,       color="#aaaaaa", linewidth=0)
-            ax.bar(x, b,         width=bar_w, align="edge", bottom=r + w,   color="#5070e0", linewidth=0)
+            ax.bar(
+                x, r, width=bar_w, align="edge", bottom=0, color="#e05050", linewidth=0
+            )
+            ax.bar(
+                x, w, width=bar_w, align="edge", bottom=r, color="#aaaaaa", linewidth=0
+            )
+            ax.bar(
+                x,
+                b,
+                width=bar_w,
+                align="edge",
+                bottom=r + w,
+                color="#5070e0",
+                linewidth=0,
+            )
 
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(0, 1)
@@ -257,7 +280,8 @@ def main():
         description="Create a frame strip for E16 grouped by agent."
     )
     parser.add_argument(
-        "--parquet", "-p",
+        "--parquet",
+        "-p",
         default=f"/data/plant-rl/offline/{VERSION}/mixed-{VERSION}.parquet",
     )
     parser.add_argument("--experiment", "-e", type=int, default=16)
@@ -265,7 +289,7 @@ def main():
     parser.add_argument("--thumb-size", type=int, default=120)
     parser.add_argument("--plot-height", type=int, default=80)
     parser.add_argument("--label-width", type=int, default=160)
-    parser.add_argument("--interval", type=float, default=1/3, help="8h = 1/3 days")
+    parser.add_argument("--interval", type=float, default=1 / 3, help="8h = 1/3 days")
     parser.add_argument("--max-day", type=float, default=13.0)
     parser.add_argument(
         "--image-backfill-minutes",
@@ -322,7 +346,13 @@ def main():
     # Day headers (0..14)
     for day in range(int(args.max_day) + 2):
         cx = label_w + day * frames_per_day * thumb + (frames_per_day * thumb) // 2
-        draw.text((cx, header_h // 2), f"Day {day}", font=font_header, fill=text_color, anchor="mm")
+        draw.text(
+            (cx, header_h // 2),
+            f"Day {day}",
+            font=font_header,
+            fill=text_color,
+            anchor="mm",
+        )
         x_sep = label_w + day * frames_per_day * thumb
         draw.line([(x_sep, 0), (x_sep, canvas_h)], fill=sep_color)
 
@@ -370,7 +400,10 @@ def main():
             whs_arr = np.array(whs)
             blues_arr = np.array(blues)
             plot_img = render_actions_strip(
-                wts_arr, reds_arr, whs_arr, blues_arr,
+                wts_arr,
+                reds_arr,
+                whs_arr,
+                blues_arr,
                 targets=targets,
                 interval=args.interval,
                 thumb=thumb,
@@ -391,7 +424,9 @@ def main():
             fill=text_color,
             anchor="lm",
         )
-        draw.line([(0, agent_end_y), (canvas_w, agent_end_y)], fill=(150, 150, 150), width=2)
+        draw.line(
+            [(0, agent_end_y), (canvas_w, agent_end_y)], fill=(150, 150, 150), width=2
+        )
 
     draw.line([(label_w, 0), (label_w, canvas_h)], fill=sep_color, width=2)
 

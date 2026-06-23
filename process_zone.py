@@ -43,7 +43,9 @@ def _csv_columns(path: Path) -> list[str]:
     return columns
 
 
-def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling="daily"):
+def process_zone(
+    data_path, output_path, exp_id, zone_id, good_days, subsampling="daily"
+):
     logging.info(f"Processing Experiment {exp_id}, Zone {zone_id} from {data_path}")
 
     # Check if raw.csv exists in the data_path
@@ -146,14 +148,14 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
             # For E18, daytime is 9:00 to 21:00, but 21:00 is dark.
             # So sample at 9:00, 13:00, 17:00 (minutes = 00)
             df = df.filter(
-                (pl.col("time").dt.minute() == 0) &
-                (pl.col("time").dt.hour().is_in([9, 13, 17]))
+                (pl.col("time").dt.minute() == 0)
+                & (pl.col("time").dt.hour().is_in([9, 13, 17]))
             )
         else:
             # 4-hourly subsampling (e.g. 9:30, 13:30, 17:30)
             df = df.filter(
-                (pl.col("time").dt.minute() == 30) &
-                (pl.col("time").dt.hour().is_in([9, 13, 17]))
+                (pl.col("time").dt.minute() == 30)
+                & (pl.col("time").dt.hour().is_in([9, 13, 17]))
             )
     else:
         raise ValueError(f"Unknown subsampling: {subsampling}")
@@ -174,6 +176,7 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
         """Return (md5_hex, mean_brightness) for the image, or ("", -1) on error."""
         import numpy as np
         from PIL import Image as _Image
+
         p = Path(data_path) / "images" / name
         try:
             with _Image.open(p) as img:
@@ -191,11 +194,13 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
         name_to_hash = {n: v[0] for n, v in props.items()}
         name_to_brightness = {n: v[1] for n, v in props.items()}
 
-        hash_df = pl.DataFrame({
-            "image_name": list(name_to_hash.keys()),
-            "_img_hash": list(name_to_hash.values()),
-            "_brightness": [name_to_brightness[k] for k in name_to_hash],
-        })
+        hash_df = pl.DataFrame(
+            {
+                "image_name": list(name_to_hash.keys()),
+                "_img_hash": list(name_to_hash.values()),
+                "_brightness": [name_to_brightness[k] for k in name_to_hash],
+            }
+        )
         df = df.join(hash_df, on="image_name", how="left")
         df = df.with_columns(
             pl.col("_img_hash").fill_null(""),
@@ -229,10 +234,12 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
     ff_days = df.filter(pl.col("forward_filled")).select("day").unique()
     n_ff_days = len(ff_days)
     if n_ff_days:
-        logging.info(f"E{exp_id}/zone{zone_id}: dropping {n_ff_days} forward-filled imaging days (keeping 9:00 energy anchor)")
-    df = df.with_columns(
-        pl.col("day").is_in(ff_days["day"]).alias("imaging_gap")
-    ).drop("forward_filled")
+        logging.info(
+            f"E{exp_id}/zone{zone_id}: dropping {n_ff_days} forward-filled imaging days (keeping 9:00 energy anchor)"
+        )
+    df = df.with_columns(pl.col("day").is_in(ff_days["day"]).alias("imaging_gap")).drop(
+        "forward_filled"
+    )
     # Keep only the 9:00 AM sample from imaging-gap days (energy anchor only)
     df = df.filter(
         ~pl.col("imaging_gap")
@@ -259,8 +266,12 @@ def process_zone(data_path, output_path, exp_id, zone_id, good_days, subsampling
     if subsampling == "daily":
         expected_next = pl.col("time") + pl.duration(days=1)
     elif subsampling == "4hourly":
-        is_overnight = (pl.col("time").dt.hour() == 17)
-        expected_next = pl.when(is_overnight).then(pl.col("time") + pl.duration(hours=16)).otherwise(pl.col("time") + pl.duration(hours=4))
+        is_overnight = pl.col("time").dt.hour() == 17
+        expected_next = (
+            pl.when(is_overnight)
+            .then(pl.col("time") + pl.duration(hours=16))
+            .otherwise(pl.col("time") + pl.duration(hours=4))
+        )
     else:
         expected_next = pl.col("time") + pl.duration(hours=1)
 

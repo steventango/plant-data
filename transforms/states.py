@@ -147,9 +147,7 @@ def transform_energy(df: pl.DataFrame) -> pl.DataFrame:
     df = df.sort("experiment", "zone", "plant_id", "time")
     df = df.with_columns(
         (
-            pl.col("cumulative_energy")
-            .shift(-1)
-            .over("experiment", "zone", "plant_id")
+            pl.col("cumulative_energy").shift(-1).over("experiment", "zone", "plant_id")
             - pl.col("cumulative_energy")
         ).alias("energy")
     )

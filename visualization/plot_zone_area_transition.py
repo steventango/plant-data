@@ -81,7 +81,9 @@ def draw_zone_plots(transitions: pl.DataFrame, output_dir: Path, exp_id: int):
         return
 
     nrows, ncols = compute_grid(len(zones))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4.5 * nrows), squeeze=False)
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(5 * ncols, 4.5 * nrows), squeeze=False
+    )
     axes_flat = axes.flatten()
 
     for idx, zone in enumerate(zones):
@@ -127,7 +129,9 @@ def draw_zone_plots(transitions: pl.DataFrame, output_dir: Path, exp_id: int):
     for j in range(len(zones), len(axes_flat)):
         axes_flat[j].set_visible(False)
 
-    fig.suptitle(f"Experiment {exp_id}: Current vs Next Plant Area by Zone", fontsize=14)
+    fig.suptitle(
+        f"Experiment {exp_id}: Current vs Next Plant Area by Zone", fontsize=14
+    )
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))
 
     out_path = output_dir / f"e{exp_id}_zone_area_transition.png"

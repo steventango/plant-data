@@ -35,7 +35,11 @@ def bootstrap_ci(vals: np.ndarray, n_boot: int = 2000, ci: float = 0.95, seed: i
     rng = np.random.default_rng(seed)
     boots = rng.choice(vals, size=(n_boot, len(vals)), replace=True).mean(axis=1)
     alpha = (1 - ci) / 2
-    return float(vals.mean()), float(np.quantile(boots, alpha)), float(np.quantile(boots, 1 - alpha))
+    return (
+        float(vals.mean()),
+        float(np.quantile(boots, alpha)),
+        float(np.quantile(boots, 1 - alpha)),
+    )
 
 
 def summarize(pdf, metric: str):
@@ -43,13 +47,15 @@ def summarize(pdf, metric: str):
     for (zone, day), g in pdf.groupby(["zone", "day"]):
         vals = g[metric].dropna().to_numpy(dtype=float)
         mean, lo, hi = bootstrap_ci(vals, seed=int(zone * 100 + day))
-        rows.append({"zone": int(zone), "day": int(day), "mean": mean, "lo": lo, "hi": hi})
+        rows.append(
+            {"zone": int(zone), "day": int(day), "mean": mean, "lo": lo, "hi": hi}
+        )
     import pandas as pd
+
     return pd.DataFrame(rows).sort_values(["zone", "day"])
 
 
 def main():
-    import pandas as pd
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -59,10 +65,20 @@ def main():
 
     path = Path(args.parquet)
     print(f"Loading {path} ...")
-    df = pl.read_parquet(path, columns=[
-        "zone", "day", "plant_id", "intensity", "clean_area",
-        "area_reward", "reward", "energy", "agent",
-    ])
+    df = pl.read_parquet(
+        path,
+        columns=[
+            "zone",
+            "day",
+            "plant_id",
+            "intensity",
+            "clean_area",
+            "area_reward",
+            "reward",
+            "energy",
+            "agent",
+        ],
+    )
     pdf = df.to_pandas()
 
     metrics = [
@@ -73,7 +89,9 @@ def main():
         ("reward", "RL reward (area − β·ΔlogE, β=1)", True),
     ]
 
-    fig, axes = plt.subplots(len(metrics), 1, figsize=(10, 4 * len(metrics)), sharex=True)
+    fig, axes = plt.subplots(
+        len(metrics), 1, figsize=(10, 4 * len(metrics)), sharex=True
+    )
     plt.rcParams.update({"font.family": "sans-serif"})
 
     for ax, (metric, ylabel, zero_line) in zip(axes, metrics):
@@ -101,7 +119,9 @@ def main():
     axes[-1].set_xlabel("Day")
     fig.suptitle(
         "E18 daily dataset — Zones 1, 3, 4, 11\n(mean ± 95% bootstrap CI across plants)",
-        fontsize=13, fontweight="bold", y=1.01,
+        fontsize=13,
+        fontweight="bold",
+        y=1.01,
     )
     fig.tight_layout()
 

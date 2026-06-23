@@ -85,14 +85,18 @@ def summarize_bootstrap(
 
         # Stable seed from keys and timestamp for deterministic bootstrap.
         key_seed = hash((tuple(keys), metric_col)) % (2**32)
-        mean, lo, hi = bootstrap_mean_ci(metric_values, n_boot=n_boot, ci=ci, seed=key_seed)
+        mean, lo, hi = bootstrap_mean_ci(
+            metric_values, n_boot=n_boot, ci=ci, seed=key_seed
+        )
 
         row = {col: val for col, val in zip(group_cols + ["wall_time"], keys)}
         row.update({"mean": mean, "ci_low": lo, "ci_high": hi, "n": len(metric_values)})
         rows.append(row)
 
     if not rows:
-        return pd.DataFrame(columns=group_cols + ["wall_time", "mean", "ci_low", "ci_high", "n"])
+        return pd.DataFrame(
+            columns=group_cols + ["wall_time", "mean", "ci_low", "ci_high", "n"]
+        )
 
     out = pd.DataFrame(rows)
     return out.sort_values(group_cols + ["wall_time"]).reset_index(drop=True)
@@ -111,7 +115,10 @@ def draw_zone_agent(
     plt.rcParams.update({"font.family": "sans-serif"})
 
     combos = (
-        summary[["agent", "zone"]].drop_duplicates().sort_values(["agent", "zone"]).itertuples(index=False)
+        summary[["agent", "zone"]]
+        .drop_duplicates()
+        .sort_values(["agent", "zone"])
+        .itertuples(index=False)
     )
     combos = list(combos)
 
@@ -120,7 +127,9 @@ def draw_zone_agent(
     agent_color = {agent: cmap(i % 10) for i, agent in enumerate(agents)}
 
     for agent, zone in combos:
-        g = summary[(summary["agent"] == agent) & (summary["zone"] == zone)].sort_values("wall_time")
+        g = summary[
+            (summary["agent"] == agent) & (summary["zone"] == zone)
+        ].sort_values("wall_time")
         x = g["wall_time"].to_numpy(dtype=float)
         y = g["mean"].to_numpy(dtype=float)
         lo = g["ci_low"].to_numpy(dtype=float)
@@ -132,7 +141,9 @@ def draw_zone_agent(
         ax.plot(x, y, color=color, alpha=0.85, linewidth=1.8, label=label)
         ax.fill_between(x, lo, hi, color=color, alpha=0.16)
 
-    ax.set_title(f"Experiment {exp_id}: {metric_label} over Time (Zone + Agent)", fontsize=13)
+    ax.set_title(
+        f"Experiment {exp_id}: {metric_label} over Time (Zone + Agent)", fontsize=13
+    )
     ax.set_xlabel("Wall Time (days)")
     ax.set_ylabel(metric_label)
     ax.grid(True, alpha=0.25)
@@ -173,7 +184,9 @@ def draw_red_blue(
         ax.plot(x, y, color=colors[group], linewidth=2.3, label=labels[group])
         ax.fill_between(x, lo, hi, color=colors[group], alpha=0.22)
 
-    ax.set_title(f"Experiment {exp_id}: {metric_label} over Time (Red vs Blue)", fontsize=13)
+    ax.set_title(
+        f"Experiment {exp_id}: {metric_label} over Time (Red vs Blue)", fontsize=13
+    )
     ax.set_xlabel("Wall Time (days)")
     ax.set_ylabel(metric_label)
     ax.grid(True, alpha=0.25)
@@ -215,7 +228,9 @@ def draw_agent_only(
         ax.plot(x, y, color=color, linewidth=2.2, alpha=0.95, label=agent)
         ax.fill_between(x, lo, hi, color=color, alpha=0.2)
 
-    ax.set_title(f"Experiment {exp_id}: {metric_label} over Time (Agent Only)", fontsize=13)
+    ax.set_title(
+        f"Experiment {exp_id}: {metric_label} over Time (Agent Only)", fontsize=13
+    )
     ax.set_xlabel("Wall Time (days)")
     ax.set_ylabel(metric_label)
     ax.grid(True, alpha=0.25)
@@ -256,7 +271,9 @@ def main():
     args = parser.parse_args()
 
     output_dir = Path(args.output)
-    pdf = load_reward_rows(Path(args.parquet), exp_id=args.experiment, max_steps=args.max_steps)
+    pdf = load_reward_rows(
+        Path(args.parquet), exp_id=args.experiment, max_steps=args.max_steps
+    )
     if pdf.empty:
         print(f"No rows found for experiment {args.experiment}")
         return
@@ -316,10 +333,14 @@ def main():
 
     # Ensure proper ordering then compute cumulative reward per trajectory
     pdf_cum = pdf_cum.sort_values(["zone", "agent", "plant_id", "wall_time"])
-    pdf_cum["cum_reward"] = pdf_cum.groupby(["zone", "agent", "plant_id"])["reward"].cumsum()
+    pdf_cum["cum_reward"] = pdf_cum.groupby(["zone", "agent", "plant_id"])[
+        "reward"
+    ].cumsum()
 
     rb_pdf_cum = rb_pdf_cum.sort_values(["zone", "agent", "plant_id", "wall_time"])
-    rb_pdf_cum["cum_reward"] = rb_pdf_cum.groupby(["zone", "agent", "plant_id"])["reward"].cumsum()
+    rb_pdf_cum["cum_reward"] = rb_pdf_cum.groupby(["zone", "agent", "plant_id"])[
+        "reward"
+    ].cumsum()
 
     cum_zone_agent = summarize_bootstrap(
         pdf_cum,

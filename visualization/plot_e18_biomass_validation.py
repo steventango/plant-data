@@ -121,7 +121,12 @@ def main():
         x="final_area",
         y="biomass_g",
         ax=ax,
-        scatter_kws={"s": 100, "color": "#2ecc71", "edgecolors": "k", "linewidths": 0.5},
+        scatter_kws={
+            "s": 100,
+            "color": "#2ecc71",
+            "edgecolors": "k",
+            "linewidths": 0.5,
+        },
         line_kws={"color": "#27ae60"},
         ci=95,
     )
@@ -137,8 +142,12 @@ def main():
     ax.set_ylabel("Biomass (g)")
     ax.set_title("Final area vs biomass", fontweight="bold")
     ax.text(
-        0.05, 0.95, corr_label(df["final_area"].values, df["biomass_g"].values),
-        transform=ax.transAxes, va="top", fontsize=10,
+        0.05,
+        0.95,
+        corr_label(df["final_area"].values, df["biomass_g"].values),
+        transform=ax.transAxes,
+        va="top",
+        fontsize=10,
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
     )
 
@@ -149,7 +158,12 @@ def main():
         x="return_mean",
         y="biomass_g",
         ax=ax,
-        scatter_kws={"s": 100, "color": "#3498db", "edgecolors": "k", "linewidths": 0.5},
+        scatter_kws={
+            "s": 100,
+            "color": "#3498db",
+            "edgecolors": "k",
+            "linewidths": 0.5,
+        },
         line_kws={"color": "#2980b9"},
         ci=95,
     )
@@ -165,8 +179,12 @@ def main():
     ax.set_ylabel("Biomass (g)")
     ax.set_title("Return vs biomass", fontweight="bold")
     ax.text(
-        0.05, 0.95, corr_label(df["return_mean"].values, df["biomass_g"].values),
-        transform=ax.transAxes, va="top", fontsize=10,
+        0.05,
+        0.95,
+        corr_label(df["return_mean"].values, df["biomass_g"].values),
+        transform=ax.transAxes,
+        va="top",
+        fontsize=10,
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
     )
 

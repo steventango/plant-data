@@ -27,7 +27,9 @@ class MockEnv(gym.Env):
         self.completed_episodes = set()  # Track completed episodes
         self.stats = stats
         self.cols = cols
-        self.action_cols = action_cols  # None → default 3-dim [red_coef, white_coef, blue_coef]
+        self.action_cols = (
+            action_cols  # None → default 3-dim [red_coef, white_coef, blue_coef]
+        )
         self.done = False
         self.embedding_dim = 768
         self.pca_dim = 10
@@ -153,7 +155,11 @@ class MockEnv(gym.Env):
                 return zeros
             vals = []
             for col in self.action_cols:
-                v = row[col][0] if col in row.columns and row[col][0] is not None else 0.0
+                v = (
+                    row[col][0]
+                    if col in row.columns and row[col][0] is not None
+                    else 0.0
+                )
                 vals.append(float(v))
             return np.array(vals, dtype=np.float32)
 

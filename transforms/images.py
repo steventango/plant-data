@@ -152,6 +152,7 @@ def process_zone_images(
 
             # Load and check brightness to skip dark images
             import numpy as np
+
             with Image.open(image_path) as img:
                 img_gray = img.convert("L")
                 mean_brightness = np.mean(np.array(img_gray))
@@ -162,7 +163,9 @@ def process_zone_images(
                 )
                 if pots_results:
                     last_time = pots_results[-1]["time"]
-                    last_frame_pots = [row for row in pots_results if row["time"] == last_time]
+                    last_frame_pots = [
+                        row for row in pots_results if row["time"] == last_time
+                    ]
                     current_frame_pots = []
                     for row in last_frame_pots:
                         new_row = row.copy()

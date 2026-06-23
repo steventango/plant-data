@@ -77,10 +77,7 @@ def load_daily_action_coefficients(parquet_path: Path) -> pd.DataFrame:
 
     MAX_ACTIONS = 13
     df = df.with_columns(
-        pl.col("wall_time")
-        .rank("ordinal")
-        .over("zone", "plant_id")
-        .alias("_step"),
+        pl.col("wall_time").rank("ordinal").over("zone", "plant_id").alias("_step"),
     )
     df = df.filter(pl.col("_step") <= MAX_ACTIONS)
 
@@ -122,9 +119,7 @@ def compute_weighted_spectra(
     return weighted
 
 
-def draw(
-    weighted: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: Path
-):
+def draw(weighted: dict[int, np.ndarray], wavelengths: np.ndarray, output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.family": "sans-serif"})
 
