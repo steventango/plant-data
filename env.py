@@ -13,6 +13,7 @@ class MockEnv(gym.Env):
         df: pl.DataFrame,
         stats: dict,
         cols: list,
+        action_cols: list | None = None,
     ):
         super().__init__()
         self.df = df.sort("experiment", "zone", "plant_id", "time")
@@ -32,27 +33,88 @@ class MockEnv(gym.Env):
         self.completed_episodes = set()  # Track completed episodes
         self.stats = stats
         self.cols = cols
+        self.action_cols = action_cols  # None → default 3-dim [red_coef, white_coef, blue_coef]
         self.done = False
         self.embedding_dim = 768
         self.pca_dim = 10
-        dim = len(cols) + self.pca_dim + self.embedding_dim
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(dim,), dtype=np.float32
+        self.obs_dim = len(cols) + self.pca_dim + self.embedding_dim
+        self.zero_obs = np.zeros((self.obs_dim,), dtype=np.float32)
+
+        # Keep only episodes with at least 2 rows to avoid terminal reset returning
+        # invalid observations when remaining episodes cannot produce transitions.
+        episode_counts = (
+            self.df.group_by(["experiment", "zone", "plant_id"])
+            .len()
+            .filter(pl.col("len") >= 2)
+            .sort(["experiment", "zone", "plant_id"])
+            .select(["experiment", "zone", "plant_id"])
         )
-        # Action space: [red_coef, white_coef, blue_coef]
-        self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
+        self.episode_keys = episode_counts.rows()
+
+        # Build per-feature fallback values from normalization stats.
+        self.col_fill_values = {
+            col: float(stats.get(col, {}).get("mean", 0.0)) for col in self.cols
+        }
+
+        # Ensure scalar feature columns never contain null/NaN at runtime.
+        self.df = self.df.with_columns(
+            [
+                pl.col(col)
+                .fill_null(self.col_fill_values[col])
+                .fill_nan(self.col_fill_values[col])
+                .alias(col)
+                for col in self.cols
+                if col in self.df.columns
+            ]
+        )
+        col_lows = np.array(
+            [stats.get(c, {}).get("min", -np.inf) for c in self.cols], dtype=np.float32
+        )
+        col_highs = np.array(
+            [stats.get(c, {}).get("max", np.inf) for c in self.cols], dtype=np.float32
+        )
+        pca_stats = stats.get("cls_token_pca", {})
+        pca_lows = np.array(
+            pca_stats.get("min", [-np.inf] * self.pca_dim), dtype=np.float32
+        )
+        pca_highs = np.array(
+            pca_stats.get("max", [np.inf] * self.pca_dim), dtype=np.float32
+        )
+        emb_stats = stats.get("cls_token", {})
+        emb_lows = np.array(
+            emb_stats.get("min", [-np.inf] * self.embedding_dim), dtype=np.float32
+        )
+        emb_highs = np.array(
+            emb_stats.get("max", [np.inf] * self.embedding_dim), dtype=np.float32
+        )
+        obs_low = np.concatenate([col_lows, pca_lows, emb_lows])
+        obs_high = np.concatenate([col_highs, pca_highs, emb_highs])
+        self.observation_space = spaces.Box(
+            low=obs_low, high=obs_high, dtype=np.float32
+        )
+        if self.action_cols is not None:
+            # Parameterized action: bounds from normalization stats (data min/max)
+            n_act = len(self.action_cols)
+            lows = np.array(
+                [stats.get(c, {}).get("min", 0.0) for c in self.action_cols],
+                dtype=np.float32,
+            )
+            highs = np.array(
+                [stats.get(c, {}).get("max", np.inf) for c in self.action_cols],
+                dtype=np.float32,
+            )
+            self.action_space = spaces.Box(low=lows, high=highs, dtype=np.float32)
+        else:
+            # Default action space: [red_coef, white_coef, blue_coef]
+            self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
 
     def _get_observation(self) -> Any:
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
-            return np.zeros(
-                (len(self.cols) + self.pca_dim + self.embedding_dim,), dtype=np.float32
-            )
+            return self.zero_obs
 
         row = self.plant_df.slice(self.current_row_index, 1)
         if row.is_empty():
-            return np.zeros(
-                (len(self.cols) + self.pca_dim + self.embedding_dim,), dtype=np.float32
-            )
+            return self.zero_obs
 
         # Get stats
         stats = row[self.cols].to_numpy().flatten()
@@ -63,16 +125,46 @@ class MockEnv(gym.Env):
         # Get embedding
         cls_token = row[["cls_token"]].to_numpy().flatten()[0]
 
+        # Some upstream vision features can still contain NaNs for edge cases.
+        stats = np.nan_to_num(stats, nan=0.0, posinf=0.0, neginf=0.0)
+        cls_token_pca = np.nan_to_num(
+            np.asarray(cls_token_pca), nan=0.0, posinf=0.0, neginf=0.0
+        )
+        cls_token = np.nan_to_num(
+            np.asarray(cls_token), nan=0.0, posinf=0.0, neginf=0.0
+        )
+
         obs = np.concatenate([stats, cls_token_pca, cls_token], dtype=np.float32)
 
         if np.isnan(obs).any():
             nan_idx = np.where(np.isnan(obs.flatten()))[0]
-            cols_with_nans = " ".join([self.cols[i] for i in nan_idx])
+            cols_with_nans = " ".join(
+                [
+                    self.cols[i] if i < len(self.cols) else f"obs_idx_{i}"
+                    for i in nan_idx
+                ]
+            )
             raise ValueError(f"NaN found in observation: {cols_with_nans}")
 
         return obs
 
     def _get_action(self) -> int | np.ndarray:
+        if self.action_cols is not None:
+            # Parameterized action: read the requested columns
+            n_act = len(self.action_cols)
+            zeros = np.zeros(n_act, dtype=np.float32)
+            if self.plant_df is None or self.current_row_index >= self.plant_df.height:
+                return zeros
+            row = self.plant_df.slice(self.current_row_index, 1)
+            if row.is_empty():
+                return zeros
+            vals = []
+            for col in self.action_cols:
+                v = row[col][0] if col in row.columns and row[col][0] is not None else 0.0
+                vals.append(float(v))
+            return np.array(vals, dtype=np.float32)
+
+        # Default: [red_coef, white_coef, blue_coef]
         if self.plant_df is None or self.current_row_index >= self.plant_df.height:
             return np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
@@ -122,12 +214,15 @@ class MockEnv(gym.Env):
         # If we were truncated, continue from where we left off
         if self.was_truncated and self.truncated_episode_key is not None:
             self.current_episode_key = self.truncated_episode_key
-            self.current_row_index = self.truncated_row_index + 1
+            # truncated_row_index was saved after the +1 increment in step(), so it
+            # already points to the first row of the continuation (e.g. day 3).
+            self.current_row_index = self.truncated_row_index
             self.was_truncated = False
             self.truncated_episode_key = None
             self.truncated_row_index = 0
-            if len(self.plant_df) < 2:
-                episode_continued = False
+            # Only continue if there are enough rows left to form at least one transition
+            remaining = self.plant_df.height - self.current_row_index
+            episode_continued = remaining >= 2
         if not episode_continued:
             # Select the next episode (cycle through all unique experiment-zone-plant combinations)
             # Skip episodes that are already completed
@@ -152,7 +247,7 @@ class MockEnv(gym.Env):
             else:
                 # All episodes completed, return None to indicate done
                 self.done = True
-                return None, {"done": True}
+                return self.zero_obs, {"done": True}
 
             # Get all rows for this episode
             self.plant_df = self.df.filter(
