@@ -70,8 +70,9 @@ def subsample_daily(df: pl.DataFrame) -> pl.DataFrame:
         df = df.drop("_next_time")
 
     # Drop imaging-gap anchor rows: they served their purpose for energy anchoring.
+    # Older parquets lack the column; fill_null(False) so their rows are kept.
     if "imaging_gap" in df.columns:
-        df = df.filter(~pl.col("imaging_gap")).drop("imaging_gap")
+        df = df.filter(~pl.col("imaging_gap").fill_null(False)).drop("imaging_gap")
 
     # log_clean_area
     df = transform_log_clean_area(df)
@@ -284,6 +285,15 @@ def main():
 
         # Rename daily Δ log_clean_area: reward → area_reward
         df = df.rename({"reward": "area_reward"})
+
+        # Align energy with area_reward
+        if "energy" in df.columns:
+            df = df.with_columns(
+                pl.col("energy")
+                .shift(1)
+                .over("experiment", "zone", "plant_id")
+                .alias("energy")
+            )
 
         # Schema A: energy_reward_schema_a_β = (β / N_STEPS) · (log(energy) − log(e_const))
         # Divided by N_STEPS=14 so that summing over an episode gives the same
